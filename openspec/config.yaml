@@ -1,20 +1,49 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Project: Bicycle Rental App (Monolith)
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Description:
+    A web application where users can browse, manage, and rent bicycles.
+    The app includes full CRUD for bicycles and a rental system for users.
+
+  Tech Stack:
+    - Backend: Python with FastAPI (REST API)
+    - Frontend: React (SPA served by the monolith)
+    - Database: SQLite for development, PostgreSQL for production
+    - ORM: SQLAlchemy
+    - Auth: JWT-based authentication
+
+  Architecture:
+    - Monolith: frontend and backend live in the same repository
+    - Backend structure: app/ (routers, models, schemas, services, database)
+    - Frontend structure: frontend/ (React app built with Vite)
+    - API prefix: /api/v1
+
+  Domain:
+    Entities:
+      - Bicycle: id, brand, status (available/rented)
+      - User: id, name, email, hashed_password, role (admin/customer)
+      - Rental: id, user_id, bicycle_id, start_time, end_time, status (active/completed)
+
+  Conventions:
+    - Use conventional commits: feat, fix, chore, docs, refactor
+    - Branch naming: feature/<name>, fix/<name>
+    - Branches are created from develop and merged back via pull request
+    - REST endpoints follow: GET /bicycles, POST /bicycles, PUT /bicycles/{id}, DELETE /bicycles/{id}
+    - Pydantic schemas for request/response validation
+    - Async endpoints where possible
+
+rules:
+  proposal:
+    - Keep proposals concise, under 400 words
+    - Always include a "Non-goals" section to define scope clearly
+    - Reference the domain entities when relevant
+  design:
+    - Always specify API endpoints with method, path, request body, and response
+    - Include database model changes if applicable
+    - Describe React components and their responsibilities
+  tasks:
+    - Break tasks into small, independent units (max 1-2 hours each)
+    - Each task must reference the file(s) it affects
+    - Group tasks by layer: backend first, then frontend

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { fetchBicycles, createBicycle, updateBicycle, deleteBicycle } from "../api/bicycles";
 import "./BicyclesPage.css";
 
@@ -100,6 +101,9 @@ export default function BicyclesPage() {
                 </td>
                 <td>
                   <div className="actions" style={{ justifyContent: "flex-end" }}>
+                    <Link to={`/bicycles/${b.id}`} className="btn btn-icon">
+                      View
+                    </Link>
                     <button className="btn btn-icon" onClick={() => openEdit(b)}>
                       Edit
                     </button>

@@ -96,6 +96,11 @@ The React app will be available at `http://localhost:5173`
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | GET | `/api/v1/health` | Health check | No |
+| GET | `/api/v1/bicycles` | List all bicycles | No |
+| GET | `/api/v1/bicycles/{id}` | Get bicycle by ID | No |
+| POST | `/api/v1/bicycles` | Create a bicycle | Admin (TODO) |
+| PUT | `/api/v1/bicycles/{id}` | Update a bicycle | Admin (TODO) |
+| DELETE | `/api/v1/bicycles/{id}` | Delete a bicycle | Admin (TODO) |
 
 ## Database Models
 

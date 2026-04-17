@@ -27,6 +27,32 @@
   font-size: 28px;
 }
 
+.navbar-links {
+  display: flex;
+  gap: 4px;
+  margin-left: 32px;
+}
+
+.nav-link {
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 14px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-link:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.nav-link.active {
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+}
+
 .main-content {
   flex: 1;
   padding: 32px;

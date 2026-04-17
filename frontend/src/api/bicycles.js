@@ -6,6 +6,12 @@ export async function fetchBicycles() {
   return res.json();
 }
 
+export async function fetchBicycle(id) {
+  const res = await fetch(`${BASE}/${id}`);
+  if (!res.ok) throw new Error("Failed to fetch bicycle");
+  return res.json();
+}
+
 export async function createBicycle(data) {
   const res = await fetch(BASE, {
     method: "POST",

@@ -53,11 +53,15 @@ The system SHALL expose a `PUT /api/v1/bicycles/{id}` endpoint that partially up
 ---
 
 ### Requirement: Delete a bicycle
-The system SHALL expose a `DELETE /api/v1/bicycles/{id}` endpoint that removes a bicycle.
+The system SHALL expose a `DELETE /api/v1/bicycles/{id}` endpoint that removes a bicycle from the database, provided it has no active rental.
 
-#### Scenario: Delete existing bicycle with no active rental
-- **WHEN** a client sends `DELETE /api/v1/bicycles/1` and the bicycle exists and has no active rental
-- **THEN** the system returns `204 No Content` and the bicycle is removed from the database
+#### Scenario: Delete bicycle with no rentals
+- **WHEN** a client sends `DELETE /api/v1/bicycles/1` and bicycle 1 exists with no active rental
+- **THEN** the system returns `204 No Content` and the bicycle is removed
+
+#### Scenario: Cannot delete bicycle with active rental
+- **WHEN** a client sends `DELETE /api/v1/bicycles/1` and bicycle 1 has an active rental (status `rented`)
+- **THEN** the system returns `400 Bad Request`
 
 #### Scenario: Delete non-existing bicycle
 - **WHEN** a client sends `DELETE /api/v1/bicycles/999` and no bicycle with that id exists
@@ -83,3 +87,16 @@ The system SHALL provide a React page at `/bicycles` that displays all bicycles 
 #### Scenario: User deletes a bicycle
 - **WHEN** a user clicks "Delete" on a bicycle row and confirms
 - **THEN** the bicycle is removed from the list
+
+---
+
+### Requirement: Bicycle status syncs with rental lifecycle
+The system SHALL automatically update the bicycle `status` field when a rental is started or completed.
+
+#### Scenario: Bicycle becomes rented when rental starts
+- **WHEN** a rental is successfully created for bicycle id 1
+- **THEN** bicycle 1 status changes from `available` to `rented`
+
+#### Scenario: Bicycle becomes available when rental completes
+- **WHEN** a rental for bicycle id 1 is successfully completed
+- **THEN** bicycle 1 status changes from `rented` to `available`

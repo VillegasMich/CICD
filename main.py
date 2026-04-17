@@ -1,11 +1,20 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from app.routers import health
+from fastapi.middleware.cors import CORSMiddleware
+from app.routers import health, bicycles
 import os
 
 app = FastAPI(title="Bicycle Rental App")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(bicycles.router, prefix="/api/v1/bicycles")
 
 # Serve React frontend in production
 frontend_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")

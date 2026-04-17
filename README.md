@@ -1,6 +1,6 @@
 # Bicycle Rental App
 
-Web application for managing and renting bicycles. Users can browse available bicycles, and administrators can manage the inventory. Built as a monolith with a FastAPI backend and a React frontend.
+Web application for managing and renting bicycles. Users can browse available bicycles, rent them from the detail page, and track active/completed rentals. Administrators can manage the inventory. Built as a monolith with a FastAPI backend and a React frontend.
 
 ## Tech Stack
 
@@ -101,6 +101,19 @@ The React app will be available at `http://localhost:5173`
 | POST | `/api/v1/bicycles` | Create a bicycle | Admin (TODO) |
 | PUT | `/api/v1/bicycles/{id}` | Update a bicycle | Admin (TODO) |
 | DELETE | `/api/v1/bicycles/{id}` | Delete a bicycle | Admin (TODO) |
+| GET | `/api/v1/rentals` | List all rentals | No |
+| POST | `/api/v1/rentals` | Start a rental | Auth (TODO) |
+| PUT | `/api/v1/rentals/{id}/complete` | Complete a rental | Auth (TODO) |
+
+## Testing Rentals
+
+Since authentication is not yet implemented, rentals require a `user_id` supplied manually. Insert a test user with:
+
+```bash
+python -m scripts.seed_test_user
+```
+
+Then use the printed `id` when renting a bicycle from the UI.
 
 ## Database Models
 

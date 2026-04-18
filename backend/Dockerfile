@@ -19,6 +19,8 @@ COPY app ./app
 COPY main.py ./
 COPY entrypoint.sh ./
 COPY scripts ./scripts
+COPY pytest.ini ./
+COPY tests ./tests
 
 RUN chmod +x /app/entrypoint.sh
 

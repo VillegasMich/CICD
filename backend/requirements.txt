@@ -17,3 +17,6 @@ coverage
 selenium
 pytest-cov
 pytest-html
+pytest-asyncio
+httpx
+aiosqlite

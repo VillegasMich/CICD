@@ -6,7 +6,6 @@ from app.models.rental import RentalStatus
 
 class RentalCreate(BaseModel):
     bicycle_id: int
-    user_id: int
 
 
 class RentalResponse(BaseModel):

@@ -12,7 +12,7 @@ async def get_all(db: AsyncSession) -> list[Rental]:
     return result.scalars().all()
 
 
-async def create(db: AsyncSession, data: RentalCreate) -> Rental:
+async def create(db: AsyncSession, data: RentalCreate, user_id: int) -> Rental:
     bicycle = await db.get(Bicycle, data.bicycle_id)
     if not bicycle:
         raise HTTPException(status_code=404, detail="Bicycle not found")
@@ -22,7 +22,7 @@ async def create(db: AsyncSession, data: RentalCreate) -> Rental:
     bicycle.status = BicycleStatus.rented
     rental = Rental(
         bicycle_id=data.bicycle_id,
-        user_id=data.user_id,
+        user_id=user_id,
         start_time=datetime.utcnow(),
         status=RentalStatus.active,
     )

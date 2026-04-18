@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchBicycles, createBicycle, updateBicycle, deleteBicycle } from "../api/bicycles";
+import { useAuth } from "../context/AuthContext";
 import "./BicyclesPage.css";
 
 const EMPTY_FORM = { brand: "", type: "", status: "available" };
 
 export default function BicyclesPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
   const [bicycles, setBicycles] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
@@ -72,9 +76,11 @@ export default function BicyclesPage() {
           <h1 className="page-title">Bicycle inventory</h1>
           <p className="page-subtitle">Manage the fleet of available bicycles</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>
-          + Add bicycle
-        </button>
+        {isAdmin && (
+          <button className="btn btn-primary" onClick={openCreate}>
+            + Add bicycle
+          </button>
+        )}
       </div>
 
       {error && !showForm && <div className="alert">{error}</div>}
@@ -104,12 +110,16 @@ export default function BicyclesPage() {
                     <Link to={`/bicycles/${b.id}`} className="btn btn-icon">
                       View
                     </Link>
-                    <button className="btn btn-icon" onClick={() => openEdit(b)}>
-                      Edit
-                    </button>
-                    <button className="btn btn-icon btn-danger" onClick={() => handleDelete(b.id)}>
-                      Delete
-                    </button>
+                    {isAdmin && (
+                      <>
+                        <button className="btn btn-icon" onClick={() => openEdit(b)}>
+                          Edit
+                        </button>
+                        <button className="btn btn-icon btn-danger" onClick={() => handleDelete(b.id)}>
+                          Delete
+                        </button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -117,7 +127,7 @@ export default function BicyclesPage() {
             {bicycles.length === 0 && (
               <tr>
                 <td colSpan="5" className="table-empty">
-                  No bicycles yet — click "Add bicycle" to create one.
+                  No bicycles yet{isAdmin ? " — click \"Add bicycle\" to create one." : "."}
                 </td>
               </tr>
             )}
@@ -125,7 +135,7 @@ export default function BicyclesPage() {
         </table>
       </div>
 
-      {showForm && (
+      {showForm && isAdmin && (
         <div className="modal-overlay" onClick={closeForm}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <form onSubmit={handleSubmit}>

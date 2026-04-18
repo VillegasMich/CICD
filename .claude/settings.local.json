@@ -2,7 +2,18 @@
   "permissions": {
     "allow": [
       "Bash(openspec instructions *)",
-      "Bash(openspec status *)"
+      "Bash(openspec status *)",
+      "Bash(openspec new *)",
+      "Bash(pip install *)",
+      "Bash(python -c \"from main import app; print\\('OK'\\); print\\([r.path for r in app.routes if hasattr\\(r, 'path'\\)][:15]\\)\")",
+      "Bash(python -c \"from main import app; print\\('backend OK'\\)\")",
+      "Bash(npm run *)",
+      "Bash(openspec list *)",
+      "Bash(pip show *)",
+      "Bash(python -c \"from app.core.security import hash_password, verify_password; h = hash_password\\('test1234'\\); print\\('ok' if verify_password\\('test1234', h\\) else 'fail'\\)\")",
+      "Bash(python -m scripts.seed_admin)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/api/v1/health)",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@example.com\",\"password\":\"admin1234\"}')"
     ]
   }
 }

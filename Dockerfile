@@ -18,6 +18,7 @@ COPY alembic ./alembic
 COPY app ./app
 COPY main.py ./
 COPY entrypoint.sh ./
+COPY scripts ./scripts
 
 RUN chmod +x /app/entrypoint.sh
 

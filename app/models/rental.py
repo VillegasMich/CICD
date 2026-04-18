@@ -14,8 +14,12 @@ class Rental(Base):
     __tablename__ = "rentals"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    bicycle_id: Mapped[int] = mapped_column(Integer, ForeignKey("bicycles.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False
+    )
+    bicycle_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bicycles.id"), nullable=False
+    )
     start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[RentalStatus] = mapped_column(

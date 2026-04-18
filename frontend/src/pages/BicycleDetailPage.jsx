@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { fetchBicycle } from "../api/bicycles";
 import { createRental } from "../api/rentals";
+import { useAuth } from "../context/AuthContext";
 import "./BicyclesPage.css";
 
 export default function BicycleDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [bicycle, setBicycle] = useState(null);
-  const [userId, setUserId] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState(null);
 
@@ -22,7 +23,6 @@ export default function BicycleDetailPage() {
   }, [id]);
 
   const openRent = () => {
-    setUserId("");
     setShowForm(true);
     setError(null);
   };
@@ -35,10 +35,7 @@ export default function BicycleDetailPage() {
   const handleRent = async (e) => {
     e.preventDefault();
     try {
-      await createRental({
-        bicycle_id: Number(id),
-        user_id: Number(userId),
-      });
+      await createRental({ bicycle_id: Number(id) });
       closeForm();
       navigate("/rentals");
     } catch {
@@ -120,19 +117,9 @@ export default function BicycleDetailPage() {
                   />
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">User ID</label>
-                  <input
-                    className="form-control"
-                    type="number"
-                    min="1"
-                    placeholder="e.g. 1"
-                    value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
-                    required
-                    autoFocus
-                  />
-                </div>
+                <p className="page-subtitle">
+                  Renting as <strong>{user?.name}</strong>.
+                </p>
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn" onClick={closeForm}>

@@ -96,24 +96,31 @@ The React app will be available at `http://localhost:5173`
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | GET | `/api/v1/health` | Health check | No |
+| POST | `/api/v1/auth/register` | Register a new customer | No |
+| POST | `/api/v1/auth/login` | Log in, returns JWT | No |
+| GET | `/api/v1/auth/me` | Current user profile | Auth |
 | GET | `/api/v1/bicycles` | List all bicycles | No |
 | GET | `/api/v1/bicycles/{id}` | Get bicycle by ID | No |
-| POST | `/api/v1/bicycles` | Create a bicycle | Admin (TODO) |
-| PUT | `/api/v1/bicycles/{id}` | Update a bicycle | Admin (TODO) |
-| DELETE | `/api/v1/bicycles/{id}` | Delete a bicycle | Admin (TODO) |
-| GET | `/api/v1/rentals` | List all rentals | No |
-| POST | `/api/v1/rentals` | Start a rental | Auth (TODO) |
-| PUT | `/api/v1/rentals/{id}/complete` | Complete a rental | Auth (TODO) |
+| POST | `/api/v1/bicycles` | Create a bicycle | Admin |
+| PUT | `/api/v1/bicycles/{id}` | Update a bicycle | Admin |
+| DELETE | `/api/v1/bicycles/{id}` | Delete a bicycle | Admin |
+| GET | `/api/v1/rentals` | List all rentals | Auth |
+| POST | `/api/v1/rentals` | Start a rental (user_id derived from JWT) | Auth |
+| PUT | `/api/v1/rentals/{id}/complete` | Complete a rental | Auth |
 
-## Testing Rentals
+## Authentication
 
-Since authentication is not yet implemented, rentals require a `user_id` supplied manually. Insert a test user with:
+The app uses JWT bearer tokens. Customers register via `POST /api/v1/auth/register`; admins are bootstrapped via a seed script.
+
+### Seed the admin user
+
+Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env`, then run:
 
 ```bash
-python -m scripts.seed_test_user
+python -m scripts.seed_admin
 ```
 
-Then use the printed `id` when renting a bicycle from the UI.
+The script is idempotent and creates the admin user only if it does not already exist.
 
 ## Database Models
 

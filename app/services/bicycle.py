@@ -45,6 +45,8 @@ async def delete(db: AsyncSession, bicycle_id: int) -> None:
         )
     )
     if active_rental.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Cannot delete a bicycle with an active rental")
+        raise HTTPException(
+            status_code=400, detail="Cannot delete a bicycle with an active rental"
+        )
     await db.delete(bicycle)
     await db.commit()

@@ -19,7 +19,9 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
 async def register(db: AsyncSession, data: RegisterRequest) -> User:
     existing = await get_user_by_email(db, data.email)
     if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+        )
 
     user = User(
         name=data.name,

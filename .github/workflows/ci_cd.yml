@@ -1,4 +1,4 @@
-name: CD Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
@@ -15,22 +15,229 @@ on:
         required: true
 
 concurrency:
-  group: cd-${{ github.event.pull_request.number || github.ref }}
+  group: ci-cd-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: bicycle-app
-  # workflow_dispatch: provided sha; pull_request: PR head sha; push: commit sha
-  DEPLOY_SHA: ${{ github.event.inputs.sha || github.event.pull_request.head.sha || github.sha }}
+  DEPLOY_SHA: ${{ github.event.inputs.sha || github.sha }}
 
 jobs:
-  # ─── Deploy Staging ───────────────────────────────────────────────────────
+  # ─── Backend CI ──────────────────────────────────────────────────────────────
+  be-lint-and-unit-tests:
+    name: BE Lint & Unit Tests
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Black (Formatter)
+        run: black app --check
+
+      - name: Run Pylint (Linter)
+        run: pylint app --output-format=text --fail-under=9 > pylint-report.txt || true
+
+      - name: Run Flake8 (Linter)
+        run: flake8 app --output-file=flake8-report.txt || true
+
+      - name: Run Unit Tests
+        run: pytest tests/unit/ -v
+
+      - name: Upload Test Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-reports
+          path: |
+            backend/pylint-report.txt
+            backend/flake8-report.txt
+
+  # ─── Frontend CI ─────────────────────────────────────────────────────────────
+  fe-test-and-build:
+    name: FE Test & Build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
+
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.nvmrc"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  # ─── Shared Infrastructure ───────────────────────────────────────────────────
+  # Runs once so be-build-and-push-ecr and fe-publish-to-artifact-store
+  # don't race on the same terraform state lock.
+  provision-shared-infra:
+    name: Provision Shared Infrastructure
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name != 'workflow_dispatch' &&
+      (
+        github.event_name == 'pull_request' ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
+      )
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.6"
+
+      - name: Terraform init - shared
+        working-directory: ./infra/shared
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET_SHARED }}" \
+            -backend-config="key=shared/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE_SHARED }}"
+
+      - name: Terraform apply - shared
+        working-directory: ./infra/shared
+        run: terraform apply -auto-approve
+
+  # ─── Backend Build & Push ────────────────────────────────────────────────────
+  be-build-and-push-ecr:
+    name: BE Build & Push to ECR
+    runs-on: ubuntu-latest
+    needs: [be-lint-and-unit-tests, provision-shared-infra]
+    if: >
+      github.event_name != 'workflow_dispatch' &&
+      (
+        github.event_name == 'pull_request' ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
+      )
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} \
+            | docker login --username AWS --password-stdin \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          BASE="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}"
+          TAGS="${BASE}:${{ github.sha }}"
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TAGS="${TAGS},${BASE}:stable"
+          fi
+          echo "value=${TAGS}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.tags.outputs.value }}
+
+  # ─── Frontend Publish ────────────────────────────────────────────────────────
+  fe-publish-to-artifact-store:
+    name: FE Publish to Artifact Store
+    runs-on: ubuntu-latest
+    needs: [fe-test-and-build, provision-shared-infra]
+    if: >
+      github.event_name != 'workflow_dispatch' &&
+      (
+        github.event_name == 'pull_request' ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
+      )
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.nvmrc"
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload versioned artifact
+        run: |
+          aws s3 sync ./frontend/dist/ \
+            s3://bicycle-frontend-artifacts-${{ secrets.AWS_ACCOUNT_ID }}/v${{ github.sha }}/
+
+      - name: Upload stable artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          aws s3 sync ./frontend/dist/ \
+            s3://bicycle-frontend-artifacts-${{ secrets.AWS_ACCOUNT_ID }}/stable/ \
+            --delete
+
+  # ─── Deploy Staging ──────────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
+    needs: [be-build-and-push-ecr, fe-publish-to-artifact-store]
     environment: staging
-    # push to develop/main, PR against develop, or manual dispatch
+    if: ${{ !failure() && !cancelled() }}
 
     outputs:
       alb_dns_name: ${{ steps.tf_outputs.outputs.alb_dns_name }}
@@ -144,13 +351,13 @@ jobs:
           curl -f --retry 5 --retry-delay 5 \
             http://${{ steps.tf_outputs.outputs.alb_dns_name }}/health
 
-  # ─── Deploy Production ────────────────────────────────────────────────────
+  # ─── Deploy Production ───────────────────────────────────────────────────────
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: deploy-staging
+    needs: [deploy-staging]
     environment: production
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ !failure() && !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
     steps:
       - uses: actions/checkout@v4

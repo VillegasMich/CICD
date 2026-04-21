@@ -246,7 +246,6 @@ jobs:
       service: ${{ steps.tf_outputs.outputs.service }}
       migration_task: ${{ steps.tf_outputs.outputs.migration_task }}
       ecs_sg: ${{ steps.tf_outputs.outputs.ecs_sg }}
-      subnets: ${{ steps.tf_outputs.outputs.subnets }}
 
     steps:
       - uses: actions/checkout@v4
@@ -298,15 +297,15 @@ jobs:
           echo "service=$(terraform output -raw ecs_service_name)" >> "$GITHUB_OUTPUT"
           echo "migration_task=$(terraform output -raw migration_task_definition_arn)" >> "$GITHUB_OUTPUT"
           echo "ecs_sg=$(terraform output -raw ecs_sg_id)" >> "$GITHUB_OUTPUT"
-          echo "subnets=$(terraform output -json subnet_ids | jq -r 'join(\",\")')" >> "$GITHUB_OUTPUT"
 
       - name: Run database migrations - staging
         run: |
+          SUBNETS=$(echo '${{ vars.SUBNET_IDS }}' | jq -r 'join(",")')
           TASK_ARN=$(aws ecs run-task \
             --cluster ${{ steps.tf_outputs.outputs.cluster }} \
             --task-definition ${{ steps.tf_outputs.outputs.migration_task }} \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[${{ steps.tf_outputs.outputs.subnets }}],securityGroups=[${{ steps.tf_outputs.outputs.ecs_sg }}],assignPublicIp=ENABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[${SUBNETS}],securityGroups=[${{ steps.tf_outputs.outputs.ecs_sg }}],assignPublicIp=ENABLED}" \
             --query 'tasks[0].taskArn' \
             --output text)
 
@@ -410,15 +409,15 @@ jobs:
           echo "service=$(terraform output -raw ecs_service_name)" >> "$GITHUB_OUTPUT"
           echo "migration_task=$(terraform output -raw migration_task_definition_arn)" >> "$GITHUB_OUTPUT"
           echo "ecs_sg=$(terraform output -raw ecs_sg_id)" >> "$GITHUB_OUTPUT"
-          echo "subnets=$(terraform output -json subnet_ids | jq -r 'join(\",\")')" >> "$GITHUB_OUTPUT"
 
       - name: Run database migrations - production
         run: |
+          SUBNETS=$(echo '${{ vars.SUBNET_IDS }}' | jq -r 'join(",")')
           TASK_ARN=$(aws ecs run-task \
             --cluster ${{ steps.tf_outputs.outputs.cluster }} \
             --task-definition ${{ steps.tf_outputs.outputs.migration_task }} \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[${{ steps.tf_outputs.outputs.subnets }}],securityGroups=[${{ steps.tf_outputs.outputs.ecs_sg }}],assignPublicIp=ENABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[${SUBNETS}],securityGroups=[${{ steps.tf_outputs.outputs.ecs_sg }}],assignPublicIp=ENABLED}" \
             --query 'tasks[0].taskArn' \
             --output text)
 

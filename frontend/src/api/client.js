@@ -1,3 +1,5 @@
+const API_BASE = window.ENV_API_URL || "";
+
 let tokenProvider = () => null;
 let onUnauthorized = () => {};
 
@@ -12,7 +14,7 @@ export async function apiFetch(path, { method = "GET", body, headers = {} } = {}
   if (body !== undefined) finalHeaders["Content-Type"] = "application/json";
   if (token) finalHeaders["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(path, {
+  const res = await fetch(API_BASE + path, {
     method,
     headers: finalHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,

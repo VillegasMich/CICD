@@ -270,10 +270,10 @@ jobs:
         working-directory: ./infra/envs/staging
         run: |
           terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_STAGING }}" \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET_STAGING }}" \
             -backend-config="key=staging/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}" \
-            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_STAGING }}"
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE_STAGING }}"
 
       - name: Terraform apply - staging
         working-directory: ./infra/envs/staging
@@ -381,10 +381,10 @@ jobs:
         working-directory: ./infra/envs/production
         run: |
           terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_PROD }}" \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET_PROD }}" \
             -backend-config="key=production/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}" \
-            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_PROD }}"
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE_PROD }}"
 
       - name: Terraform apply - production
         working-directory: ./infra/envs/production

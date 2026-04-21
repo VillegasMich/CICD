@@ -76,10 +76,10 @@ jobs:
         working-directory: ./infra/shared
         run: |
           terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET_SHARED }}" \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET_SHARED }}" \
             -backend-config="key=shared/terraform.tfstate" \
             -backend-config="region=${{ env.AWS_REGION }}" \
-            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE_SHARED }}"
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE_SHARED }}"
 
       - name: Terraform apply - shared
         working-directory: ./infra/shared

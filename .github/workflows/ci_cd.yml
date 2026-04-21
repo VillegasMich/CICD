@@ -265,6 +265,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~1.6"
+          terraform_wrapper: false
 
       - name: Terraform init - staging
         working-directory: ./infra/envs/staging
@@ -376,6 +377,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~1.6"
+          terraform_wrapper: false
 
       - name: Terraform init - production
         working-directory: ./infra/envs/production

@@ -26,15 +26,15 @@ jobs:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     environment: staging
-    # Auto: ci_be completed on push to main OR on a PR targeting main
-    # Manual: workflow_dispatch (for develop PRs or re-deploys)
+    # Auto: ci_be completed on push/PR to main OR push/PR to develop
+    # Manual: workflow_dispatch
     if: >
       github.event_name == 'workflow_dispatch' ||
       (
         github.event.workflow_run.conclusion == 'success' &&
         (
-          (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main') ||
-          (github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0].base.ref == 'main')
+          (github.event.workflow_run.event == 'push' && (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'develop')) ||
+          (github.event.workflow_run.event == 'pull_request' && (github.event.workflow_run.pull_requests[0].base.ref == 'main' || github.event.workflow_run.pull_requests[0].base.ref == 'develop'))
         )
       )
 

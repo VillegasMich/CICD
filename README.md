@@ -93,20 +93,20 @@ The React app will be available at `http://localhost:5173`
 
 ## API Endpoints
 
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| GET | `/api/v1/health` | Health check | No |
-| POST | `/api/v1/auth/register` | Register a new customer | No |
-| POST | `/api/v1/auth/login` | Log in, returns JWT | No |
-| GET | `/api/v1/auth/me` | Current user profile | Auth |
-| GET | `/api/v1/bicycles` | List all bicycles | No |
-| GET | `/api/v1/bicycles/{id}` | Get bicycle by ID | No |
-| POST | `/api/v1/bicycles` | Create a bicycle | Admin |
-| PUT | `/api/v1/bicycles/{id}` | Update a bicycle | Admin |
-| DELETE | `/api/v1/bicycles/{id}` | Delete a bicycle | Admin |
-| GET | `/api/v1/rentals` | List all rentals | Auth |
-| POST | `/api/v1/rentals` | Start a rental (user_id derived from JWT) | Auth |
-| PUT | `/api/v1/rentals/{id}/complete` | Complete a rental | Auth |
+| Method | Endpoint                        | Description                               | Auth  |
+| ------ | ------------------------------- | ----------------------------------------- | ----- |
+| GET    | `/api/v1/health`                | Health check                              | No    |
+| POST   | `/api/v1/auth/register`         | Register a new customer                   | No    |
+| POST   | `/api/v1/auth/login`            | Log in, returns JWT                       | No    |
+| GET    | `/api/v1/auth/me`               | Current user profile                      | Auth  |
+| GET    | `/api/v1/bicycles`              | List all bicycles                         | No    |
+| GET    | `/api/v1/bicycles/{id}`         | Get bicycle by ID                         | No    |
+| POST   | `/api/v1/bicycles`              | Create a bicycle                          | Admin |
+| PUT    | `/api/v1/bicycles/{id}`         | Update a bicycle                          | Admin |
+| DELETE | `/api/v1/bicycles/{id}`         | Delete a bicycle                          | Admin |
+| GET    | `/api/v1/rentals`               | List all rentals                          | Auth  |
+| POST   | `/api/v1/rentals`               | Start a rental (user_id derived from JWT) | Auth  |
+| PUT    | `/api/v1/rentals/{id}/complete` | Complete a rental                         | Auth  |
 
 ## Authentication
 
@@ -124,8 +124,8 @@ The script is idempotent and creates the admin user only if it does not already 
 
 ## Database Models
 
-| Model | Description |
-|-------|-------------|
+| Model     | Description                                   |
+| --------- | --------------------------------------------- |
 | `Bicycle` | Rentable bicycles with brand, type and status |
-| `User` | Registered users with admin/customer roles |
-| `Rental` | Rental records linking users to bicycles |
+| `User`    | Registered users with admin/customer roles    |
+| `Rental`  | Rental records linking users to bicycles      |

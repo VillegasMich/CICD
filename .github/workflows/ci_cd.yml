@@ -403,7 +403,7 @@ jobs:
       - name: E2E tests - staging
         working-directory: ./frontend
         env:
-          CYPRESS_BASE_URL: http://${{ steps.tf_outputs.outputs.frontend_url }}
+          CYPRESS_BASE_URL: ${{ steps.tf_outputs.outputs.frontend_url }}
         run: npx cypress run
 
       - name: Print staging URLs

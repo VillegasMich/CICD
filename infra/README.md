@@ -20,6 +20,48 @@ Terraform IaC for deploying the Bicycle Rental App to AWS. Manages two isolated 
 
 ---
 
+## CI/CD Pipeline
+
+```mermaid
+flowchart TD
+    subgraph CI["CI — Build & Publish Artifacts"]
+        BeLint["BE Lint & Unit Tests\nblack · pylint · flake8 · pytest"]
+        FeBuild["FE Test & Build\nnpm ci · build"]
+        SharedInfra["Provision Shared Infra\nECR · S3 artifact bucket"]
+        BePush["BE Build & Push to ECR"]
+        FePublish["FE Publish to S3 Artifact Store"]
+
+        BeLint --> BePush
+        FeBuild --> FePublish
+        SharedInfra --> BePush
+        SharedInfra --> FePublish
+    end
+
+    subgraph CD["CD — Deploy"]
+        Staging["Deploy to Staging\nTerraform · DB migrations · ECS rollout · Acceptance tests"]
+        Prod["Deploy to Production\nTerraform · DB migrations · ECS rollout · Smoke tests"]
+
+        Staging -->|"push to main only"| Prod
+    end
+
+    BePush --> Staging
+    FePublish --> Staging
+
+    style CI fill:#dbeafe,stroke:#3b82f6,color:#1e40af
+    style CD fill:#dcfce7,stroke:#16a34a,color:#14532d
+```
+
+**Trigger conditions:**
+
+| Event | Jobs that run |
+|---|---|
+| PR → `develop` | `BE Lint & Unit Tests`, `FE Test & Build` |
+| push → `develop` | Full CI + `Deploy to Staging` |
+| push → `main` | Full CI + `Deploy to Staging` + `Deploy to Production` |
+| `workflow_dispatch` (SHA) | `Deploy to Staging` → `Deploy to Production` (skips CI) |
+
+---
+
 ## Prerequisites
 
 - [Terraform ≥ 1.6](https://developer.hashicorp.com/terraform/install)

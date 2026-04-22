@@ -99,11 +99,8 @@ jobs:
     name: Provision Shared Infrastructure
     runs-on: ubuntu-latest
     if: >
-      github.event_name != 'workflow_dispatch' &&
-      (
-        github.event_name == 'pull_request' ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
-      )
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
 
     steps:
       - uses: actions/checkout@v4
@@ -140,11 +137,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [be-lint-and-unit-tests, provision-shared-infra]
     if: >
-      github.event_name != 'workflow_dispatch' &&
-      (
-        github.event_name == 'pull_request' ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
-      )
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
 
     steps:
       - uses: actions/checkout@v4
@@ -189,11 +183,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [fe-test-and-build, provision-shared-infra]
     if: >
-      github.event_name != 'workflow_dispatch' &&
-      (
-        github.event_name == 'pull_request' ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
-      )
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
 
     steps:
       - uses: actions/checkout@v4
@@ -237,7 +228,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [be-build-and-push-ecr, fe-publish-to-artifact-store]
     environment: staging
-    if: ${{ !failure() && !cancelled() }}
+    if: ${{ !failure() && !cancelled() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))) }}
 
     outputs:
       alb_dns_name: ${{ steps.tf_outputs.outputs.alb_dns_name }}
@@ -323,6 +314,15 @@ jobs:
             --output text)
 
           echo "Exit code: $EXIT_CODE"
+
+          TASK_ID=$(echo "$TASK_ARN" | awk -F'/' '{print $NF}')
+          echo "--- Migration logs ---"
+          aws logs get-log-events \
+            --log-group-name /ecs/bicycle-staging-task \
+            --log-stream-name "migration/${TASK_ID}" \
+            --query 'events[*].message' \
+            --output text 2>/dev/null || echo "(no logs yet)"
+
           [ "$EXIT_CODE" = "0" ] || (echo "Migration failed!" && exit 1)
 
       - name: Deploy backend - staging

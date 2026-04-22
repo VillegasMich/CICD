@@ -102,6 +102,7 @@ module "ecs_backend" {
   alb_sg_id        = aws_security_group.alb.id
   ecs_sg_id        = aws_security_group.ecs_tasks.id
   aws_region       = var.aws_region
+  cors_origins     = module.frontend.website_endpoint
 }
 
 # --- Frontend S3 ---

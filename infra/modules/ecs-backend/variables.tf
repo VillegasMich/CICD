@@ -63,3 +63,9 @@ variable "aws_region" {
   type        = string
   default     = "us-east-1"
 }
+
+variable "cors_origins" {
+  description = "Comma-separated list of allowed CORS origins (e.g. the frontend S3 website URL)."
+  type        = string
+  default     = ""
+}

@@ -93,6 +93,7 @@ resource "aws_ecs_task_definition" "app" {
         { name = "JWT_SECRET", value = var.jwt_secret },
         { name = "ADMIN_EMAIL", value = var.admin_email },
         { name = "ADMIN_PASSWORD", value = var.admin_password },
+        { name = "CORS_ORIGINS", value = var.cors_origins },
       ]
 
       logConfiguration = {

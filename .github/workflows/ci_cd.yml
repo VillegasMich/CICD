@@ -241,6 +241,7 @@ jobs:
 
     outputs:
       alb_dns_name: ${{ steps.tf_outputs.outputs.alb_dns_name }}
+      frontend_url: ${{ steps.tf_outputs.outputs.frontend_url }}
       frontend_bucket: ${{ steps.tf_outputs.outputs.frontend_bucket }}
       cluster: ${{ steps.tf_outputs.outputs.cluster }}
       service: ${{ steps.tf_outputs.outputs.service }}
@@ -292,6 +293,7 @@ jobs:
         working-directory: ./infra/envs/staging
         run: |
           echo "alb_dns_name=$(terraform output -raw alb_dns_name)" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$(terraform output -raw frontend_website_endpoint)" >> "$GITHUB_OUTPUT"
           echo "frontend_bucket=$(terraform output -raw frontend_bucket_name)" >> "$GITHUB_OUTPUT"
           echo "cluster=$(terraform output -raw ecs_cluster_name)" >> "$GITHUB_OUTPUT"
           echo "service=$(terraform output -raw ecs_service_name)" >> "$GITHUB_OUTPUT"
@@ -350,6 +352,14 @@ jobs:
         run: |
           curl -f --retry 5 --retry-delay 5 \
             http://${{ steps.tf_outputs.outputs.alb_dns_name }}/api/v1/health
+
+      - name: Print staging URLs
+        run: |
+          echo "### Staging Deploy Complete" >> $GITHUB_STEP_SUMMARY
+          echo "| | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | http://${{ steps.tf_outputs.outputs.alb_dns_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ steps.tf_outputs.outputs.frontend_url }} |" >> $GITHUB_STEP_SUMMARY
 
   # ─── Deploy Production ───────────────────────────────────────────────────────
   deploy-production:

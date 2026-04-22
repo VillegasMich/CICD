@@ -319,7 +319,7 @@ jobs:
           echo "--- Migration logs ---"
           aws logs get-log-events \
             --log-group-name /ecs/bicycle-staging-task \
-            --log-stream-name "migration/${TASK_ID}" \
+            --log-stream-name "migration/bicycle-staging-migration/${TASK_ID}" \
             --query 'events[*].message' \
             --output text 2>/dev/null || echo "(no logs yet)"
 

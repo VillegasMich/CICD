@@ -23,3 +23,12 @@ frontend/dist/
 .idea/
 
 .claude/settings.local.json
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example

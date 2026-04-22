@@ -332,9 +332,24 @@ jobs:
             --service ${{ steps.tf_outputs.outputs.service }} \
             --force-new-deployment
 
-          aws ecs wait services-stable \
-            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
-            --services ${{ steps.tf_outputs.outputs.service }}
+          echo "Waiting for primary deployment to complete..."
+          TIMEOUT=1800
+          INTERVAL=15
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            STATUS=$(aws ecs describe-services \
+              --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+              --services ${{ steps.tf_outputs.outputs.service }} \
+              --query 'services[0].deployments[?status==`PRIMARY`].rolloutState' \
+              --output text)
+            echo "  Primary rollout state: ${STATUS} (${ELAPSED}s elapsed)"
+            [ "$STATUS" = "COMPLETED" ] && break
+            [ "$STATUS" = "FAILED" ] && (echo "Deployment failed!" && exit 1)
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          [ $ELAPSED -ge $TIMEOUT ] && (echo "Timed out waiting for service stability" && exit 1)
+          echo "Deployment complete."
 
       - name: Deploy frontend - staging
         run: |
@@ -452,9 +467,24 @@ jobs:
             --service ${{ steps.tf_outputs.outputs.service }} \
             --force-new-deployment
 
-          aws ecs wait services-stable \
-            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
-            --services ${{ steps.tf_outputs.outputs.service }}
+          echo "Waiting for primary deployment to complete..."
+          TIMEOUT=1800
+          INTERVAL=15
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            STATUS=$(aws ecs describe-services \
+              --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+              --services ${{ steps.tf_outputs.outputs.service }} \
+              --query 'services[0].deployments[?status==`PRIMARY`].rolloutState' \
+              --output text)
+            echo "  Primary rollout state: ${STATUS} (${ELAPSED}s elapsed)"
+            [ "$STATUS" = "COMPLETED" ] && break
+            [ "$STATUS" = "FAILED" ] && (echo "Deployment failed!" && exit 1)
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          [ $ELAPSED -ge $TIMEOUT ] && (echo "Timed out waiting for service stability" && exit 1)
+          echo "Deployment complete."
 
       - name: Deploy frontend - production
         run: |

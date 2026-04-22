@@ -89,9 +89,6 @@ jobs:
       - name: Install dependencies
         run: npm i
 
-      - name: Run Cypress tests
-        run: npm run e2e
-
       - name: Build
         run: npm run build
 

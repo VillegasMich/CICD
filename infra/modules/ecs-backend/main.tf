@@ -128,7 +128,8 @@ resource "aws_ecs_task_definition" "migration" {
     {
       name       = "bicycle-${var.environment}-migration"
       image      = var.docker_image_uri
-      entryPoint = ["alembic", "upgrade", "head"]
+      entryPoint = ["/bin/sh", "-c"]
+      command    = ["alembic upgrade head && python scripts/create_admin.py"]
 
       environment = [
         { name = "DATABASE_URL", value = var.database_url },

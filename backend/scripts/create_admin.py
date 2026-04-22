@@ -1,4 +1,5 @@
 import asyncio
+import os
 import secrets
 import string
 import sys
@@ -11,17 +12,14 @@ from sqlalchemy import select
 from app.core.security import hash_password
 from app.database import AsyncSessionLocal
 from app.models.user import User, UserRole
+from dotenv import load_dotenv
 
-
-def generate_password(length: int = 16) -> str:
-    alphabet = string.ascii_letters + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(length))
-
+load_dotenv()
 
 async def create_admin() -> None:
     name = "Test Admin"
-    email = f"admin+{secrets.token_hex(4)}@example.com"
-    password = generate_password()
+    email = os.getenv("ADMIN_EMAIL")
+    password = os.getenv("ADMIN_PASSWORD")
 
     async with AsyncSessionLocal() as db:
         existing = await db.execute(select(User).where(User.email == email))

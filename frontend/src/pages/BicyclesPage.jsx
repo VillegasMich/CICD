@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchBicycles, createBicycle, updateBicycle, deleteBicycle } from "../api/bicycles";
+import {
+  fetchBicycles,
+  createBicycle,
+  updateBicycle,
+  deleteBicycle,
+} from "../api/bicycles";
 import { useAuth } from "../context/AuthContext";
 import "./BicyclesPage.css";
 
@@ -74,7 +79,9 @@ export default function BicyclesPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Bicycle inventory</h1>
-          <p className="page-subtitle">Manage the fleet of available bicycles</p>
+          <p className="page-subtitle">
+            Manage the fleet of available bicycles
+          </p>
         </div>
         {isAdmin && (
           <button className="btn btn-primary" onClick={openCreate}>
@@ -106,16 +113,29 @@ export default function BicyclesPage() {
                   <span className={`badge badge-${b.status}`}>{b.status}</span>
                 </td>
                 <td>
-                  <div className="actions" style={{ justifyContent: "flex-end" }}>
-                    <Link to={`/bicycles/${b.id}`} className="btn btn-icon">
+                  <div
+                    className="actions"
+                    style={{ justifyContent: "flex-end" }}
+                  >
+                    <Link
+                      to={`/bicycles/${b.id}`}
+                      className="btn btn-icon"
+                      id="view-link"
+                    >
                       View
                     </Link>
                     {isAdmin && (
                       <>
-                        <button className="btn btn-icon" onClick={() => openEdit(b)}>
+                        <button
+                          className="btn btn-icon"
+                          onClick={() => openEdit(b)}
+                        >
                           Edit
                         </button>
-                        <button className="btn btn-icon btn-danger" onClick={() => handleDelete(b.id)}>
+                        <button
+                          className="btn btn-icon btn-danger"
+                          onClick={() => handleDelete(b.id)}
+                        >
                           Delete
                         </button>
                       </>
@@ -127,7 +147,8 @@ export default function BicyclesPage() {
             {bicycles.length === 0 && (
               <tr>
                 <td colSpan="5" className="table-empty">
-                  No bicycles yet{isAdmin ? " — click \"Add bicycle\" to create one." : "."}
+                  No bicycles yet
+                  {isAdmin ? ' — click "Add bicycle" to create one.' : "."}
                 </td>
               </tr>
             )}
@@ -140,7 +161,9 @@ export default function BicyclesPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <form onSubmit={handleSubmit}>
               <div className="modal-header">
-                <h2 className="modal-title">{editingId ? "Edit bicycle" : "New bicycle"}</h2>
+                <h2 className="modal-title">
+                  {editingId ? "Edit bicycle" : "New bicycle"}
+                </h2>
               </div>
               <div className="modal-body">
                 {error && <div className="alert">{error}</div>}
@@ -151,7 +174,9 @@ export default function BicyclesPage() {
                     className="form-control"
                     placeholder="e.g. Trek"
                     value={form.brand}
-                    onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, brand: e.target.value })
+                    }
                     required
                     autoFocus
                   />
@@ -173,7 +198,9 @@ export default function BicyclesPage() {
                   <select
                     className="form-control"
                     value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, status: e.target.value })
+                    }
                   >
                     <option value="available">Available</option>
                     <option value="rented">Rented</option>

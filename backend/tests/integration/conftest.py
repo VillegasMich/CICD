@@ -1,53 +1,60 @@
 import os
+import uuid
 
 import pytest
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.pool import NullPool
+from httpx import AsyncClient
+from dotenv import load_dotenv
 
-# JWT_SECRET must be set before app is imported so Settings() validates cleanly.
-# DATABASE_URL must be provided by the environment (Docker / CI staging).
-os.environ.setdefault("JWT_SECRET", "test-secret")
+load_dotenv()
 
-if not os.getenv("DATABASE_URL"):
-    raise RuntimeError(
-        "DATABASE_URL is not set. Integration tests must be run inside the Docker "
-        "container where the staging database is available."
-    )
-
-from main import app
-from app.database import Base, get_db
-
-
-test_engine = create_async_engine(os.getenv("DATABASE_URL"), echo=False, poolclass=NullPool)
-TestSessionLocal = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
-
-
-async def override_get_db():
-    async with TestSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
-
-
-@pytest.fixture(autouse=True)
-async def clean_db():
-    yield
-    async with test_engine.begin() as conn:
-        for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(table.delete())
-
-
-@pytest.fixture
-async def db():
-    async with TestSessionLocal() as session:
-        yield session
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 
 @pytest.fixture
 async def async_client():
-    app.dependency_overrides[get_db] = override_get_db
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(base_url=BACKEND_URL) as ac:
         yield ac
-    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def customer(async_client):
+    email = f"customer_{uuid.uuid4().hex[:8]}@example.com"
+    password = "password123"
+    r = await async_client.post(
+        "/api/v1/auth/register",
+        json={"name": "Test Customer", "email": email, "password": password},
+    )
+    assert r.status_code == 201
+    user_id = r.json()["id"]
+    r = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    assert r.status_code == 200
+    return {"id": user_id, "email": email, "password": password, "token": r.json()["access_token"]}
+
+
+@pytest.fixture
+async def admin_token(async_client):
+    r = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": os.getenv("ADMIN_EMAIL"), "password": os.getenv("ADMIN_PASSWORD")},
+    )
+    assert r.status_code == 200
+    return r.json()["access_token"]
+
+
+@pytest.fixture
+async def bicycle(async_client, admin_token):
+    r = await async_client.post(
+        "/api/v1/bicycles",
+        json={"brand": "Test Brand", "type": "Mountain", "status": "available"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert r.status_code == 201
+    bike = r.json()
+    yield bike
+    await async_client.delete(
+        f"/api/v1/bicycles/{bike['id']}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )

@@ -163,6 +163,11 @@ resource "aws_ecs_service" "app" {
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200
 
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
   network_configuration {
     subnets          = var.subnet_ids
     security_groups  = [var.ecs_sg_id]

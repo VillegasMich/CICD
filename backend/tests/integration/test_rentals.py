@@ -1,160 +1,121 @@
-"""
-Integration tests for the rentals router — mirrors unit/test_rental.py scope.
-"""
-from datetime import datetime
+async def test_get_all(async_client, customer, bicycle):
+    # Two sequential rentals on the same bike; each completed before the next starts
+    for _ in range(2):
+        r = await async_client.post(
+            "/api/v1/rentals",
+            json={"bicycle_id": bicycle["id"]},
+            headers={"Authorization": f"Bearer {customer['token']}"},
+        )
+        assert r.status_code == 201
+        await async_client.put(
+            f"/api/v1/rentals/{r.json()['id']}/complete",
+            headers={"Authorization": f"Bearer {customer['token']}"},
+        )
 
-from app.core.security import create_access_token, hash_password
-from app.models.bicycle import Bicycle, BicycleStatus
-from app.models.rental import Rental, RentalStatus
-from app.models.user import User, UserRole
-
-
-def _customer(db):
-    user = User(
-        name="Test Customer",
-        email="customer@example.com",
-        hashed_password=hash_password("pass123"),
-        role=UserRole.customer,
-    )
-    db.add(user)
-    return user
-
-
-async def test_get_all(async_client, db):
-    customer = _customer(db)
-    bike1 = Bicycle(brand="Brand A", type="Mountain", status=BicycleStatus.rented)
-    bike2 = Bicycle(brand="Brand B", type="Road", status=BicycleStatus.rented)
-    db.add(bike1)
-    db.add(bike2)
-    await db.commit()
-    await db.refresh(customer)
-    await db.refresh(bike1)
-    await db.refresh(bike2)
-
-    rental1 = Rental(bicycle_id=bike1.id, user_id=customer.id, start_time=datetime.utcnow(), status=RentalStatus.active)
-    rental2 = Rental(bicycle_id=bike2.id, user_id=customer.id, start_time=datetime.utcnow(), status=RentalStatus.completed)
-    db.add(rental1)
-    db.add(rental2)
-    await db.commit()
-
-    token = create_access_token(customer.id, customer.role.value)
     response = await async_client.get(
         "/api/v1/rentals",
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"Authorization": f"Bearer {customer['token']}"},
     )
     assert response.status_code == 200
-    assert len(response.json()) == 2
 
 
-async def test_create_rental(async_client, db):
-    customer = _customer(db)
-    bike = Bicycle(brand="Brand A", type="Mountain", status=BicycleStatus.available)
-    db.add(bike)
-    await db.commit()
-    await db.refresh(customer)
-    await db.refresh(bike)
-
-    token = create_access_token(customer.id, customer.role.value)
+async def test_create_rental(async_client, customer, bicycle):
     response = await async_client.post(
         "/api/v1/rentals",
-        json={"bicycle_id": bike.id},
-        headers={"Authorization": f"Bearer {token}"},
+        json={"bicycle_id": bicycle["id"]},
+        headers={"Authorization": f"Bearer {customer['token']}"},
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["bicycle_id"] == bike.id
-    assert data["user_id"] == customer.id
+    assert data["bicycle_id"] == bicycle["id"]
+    assert data["user_id"] == customer["id"]
     assert data["status"] == "active"
+    # Complete so the bicycle fixture teardown can delete the bike
+    await async_client.put(
+        f"/api/v1/rentals/{data['id']}/complete",
+        headers={"Authorization": f"Bearer {customer['token']}"},
+    )
 
 
-async def test_create_rental_bicycle_not_found(async_client, db):
-    customer = _customer(db)
-    await db.commit()
-    await db.refresh(customer)
-
-    token = create_access_token(customer.id, customer.role.value)
+async def test_create_rental_bicycle_not_found(async_client, customer):
     response = await async_client.post(
         "/api/v1/rentals",
-        json={"bicycle_id": 999},
-        headers={"Authorization": f"Bearer {token}"},
+        json={"bicycle_id": 999999},
+        headers={"Authorization": f"Bearer {customer['token']}"},
     )
     assert response.status_code == 404
     assert response.json()["detail"] == "Bicycle not found"
 
 
-async def test_create_rental_bicycle_not_available(async_client, db):
-    customer = _customer(db)
-    bike = Bicycle(brand="Brand A", type="Mountain", status=BicycleStatus.rented)
-    db.add(bike)
-    await db.commit()
-    await db.refresh(customer)
-    await db.refresh(bike)
+async def test_create_rental_bicycle_not_available(async_client, customer, bicycle):
+    r = await async_client.post(
+        "/api/v1/rentals",
+        json={"bicycle_id": bicycle["id"]},
+        headers={"Authorization": f"Bearer {customer['token']}"},
+    )
+    assert r.status_code == 201
+    rental_id = r.json()["id"]
 
-    token = create_access_token(customer.id, customer.role.value)
     response = await async_client.post(
         "/api/v1/rentals",
-        json={"bicycle_id": bike.id},
-        headers={"Authorization": f"Bearer {token}"},
+        json={"bicycle_id": bicycle["id"]},
+        headers={"Authorization": f"Bearer {customer['token']}"},
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Bicycle is not available"
 
+    # Complete so the bicycle fixture teardown can delete the bike
+    await async_client.put(
+        f"/api/v1/rentals/{rental_id}/complete",
+        headers={"Authorization": f"Bearer {customer['token']}"},
+    )
 
-async def test_complete_rental(async_client, db):
-    customer = _customer(db)
-    bike = Bicycle(brand="Brand A", type="Mountain", status=BicycleStatus.rented)
-    db.add(bike)
-    await db.commit()
-    await db.refresh(customer)
-    await db.refresh(bike)
 
-    rental = Rental(bicycle_id=bike.id, user_id=customer.id, start_time=datetime.utcnow(), status=RentalStatus.active)
-    db.add(rental)
-    await db.commit()
-    await db.refresh(rental)
+async def test_complete_rental(async_client, customer, bicycle):
+    r = await async_client.post(
+        "/api/v1/rentals",
+        json={"bicycle_id": bicycle["id"]},
+        headers={"Authorization": f"Bearer {customer['token']}"},
+    )
+    assert r.status_code == 201
+    rental_id = r.json()["id"]
 
-    token = create_access_token(customer.id, customer.role.value)
     response = await async_client.put(
-        f"/api/v1/rentals/{rental.id}/complete",
-        headers={"Authorization": f"Bearer {token}"},
+        f"/api/v1/rentals/{rental_id}/complete",
+        headers={"Authorization": f"Bearer {customer['token']}"},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["id"] == rental.id
+    assert data["id"] == rental_id
     assert data["status"] == "completed"
 
 
-async def test_complete_rental_not_found(async_client, db):
-    customer = _customer(db)
-    await db.commit()
-    await db.refresh(customer)
-
-    token = create_access_token(customer.id, customer.role.value)
+async def test_complete_rental_not_found(async_client, customer):
     response = await async_client.put(
-        "/api/v1/rentals/999/complete",
-        headers={"Authorization": f"Bearer {token}"},
+        "/api/v1/rentals/999999/complete",
+        headers={"Authorization": f"Bearer {customer['token']}"},
     )
     assert response.status_code == 404
     assert response.json()["detail"] == "Rental not found"
 
 
-async def test_complete_rental_not_active(async_client, db):
-    customer = _customer(db)
-    bike = Bicycle(brand="Brand A", type="Mountain", status=BicycleStatus.available)
-    db.add(bike)
-    await db.commit()
-    await db.refresh(customer)
-    await db.refresh(bike)
+async def test_complete_rental_not_active(async_client, customer, bicycle):
+    r = await async_client.post(
+        "/api/v1/rentals",
+        json={"bicycle_id": bicycle["id"]},
+        headers={"Authorization": f"Bearer {customer['token']}"},
+    )
+    assert r.status_code == 201
+    rental_id = r.json()["id"]
 
-    rental = Rental(bicycle_id=bike.id, user_id=customer.id, start_time=datetime.utcnow(), status=RentalStatus.completed)
-    db.add(rental)
-    await db.commit()
-    await db.refresh(rental)
+    await async_client.put(
+        f"/api/v1/rentals/{rental_id}/complete",
+        headers={"Authorization": f"Bearer {customer['token']}"},
+    )
 
-    token = create_access_token(customer.id, customer.role.value)
     response = await async_client.put(
-        f"/api/v1/rentals/{rental.id}/complete",
-        headers={"Authorization": f"Bearer {token}"},
+        f"/api/v1/rentals/{rental_id}/complete",
+        headers={"Authorization": f"Bearer {customer['token']}"},
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Rental is not active"

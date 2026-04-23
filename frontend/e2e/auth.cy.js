@@ -5,7 +5,7 @@ const TEST_USER = {
 };
 
 before(() => {
-  cy.request({ method: "POST", url: "/api/v1/auth/register", body: TEST_USER, failOnStatusCode: false });
+  cy.request({ method: "POST", url: `${Cypress.env("API_URL")}/api/v1/auth/register`, body: TEST_USER, failOnStatusCode: false });
 });
 
 describe("Authentication", () => {

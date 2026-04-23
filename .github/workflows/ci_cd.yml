@@ -404,6 +404,7 @@ jobs:
         working-directory: ./frontend
         env:
           CYPRESS_BASE_URL: ${{ steps.tf_outputs.outputs.frontend_url }}
+          CYPRESS_API_URL: http://${{ steps.tf_outputs.outputs.alb_dns_name }}
         run: npx cypress run
 
       - name: Print staging URLs

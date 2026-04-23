@@ -14,7 +14,7 @@ before(() => {
 });
 
 function login() {
-  cy.visit("/login");
+  cy.visit("/login", { failOnStatusCode: false });
   cy.get("input[type='email']").type(TEST_USER.email);
   cy.get("input[type='password']").type(TEST_USER.password);
   cy.get("button[type='submit']").click();

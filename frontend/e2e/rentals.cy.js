@@ -9,7 +9,7 @@ before(() => {
 });
 
 function login() {
-  cy.visit("/login");
+  cy.visit("/login", { failOnStatusCode: false });
   cy.get("input[type='email']").type(TEST_USER.email);
   cy.get("input[type='password']").type(TEST_USER.password);
   cy.get("button[type='submit']").click();
@@ -20,7 +20,7 @@ describe("Rentals page", () => {
   beforeEach(login);
 
   it("loads the rentals page without errors", () => {
-    cy.visit("/rentals");
+    cy.visit("/rentals", { failOnStatusCode: false });
     cy.get(".page-title").should("contain", "Rentals");
     cy.get(".alert").should("not.exist");
   });

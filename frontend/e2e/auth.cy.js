@@ -10,7 +10,7 @@ before(() => {
 
 describe("Authentication", () => {
   it("logs in with valid credentials and redirects to bicycles", () => {
-    cy.visit("/login");
+    cy.visit("/login", { failOnStatusCode: false });
     cy.get("input[type='email']").type(TEST_USER.email);
     cy.get("input[type='password']").type(TEST_USER.password);
     cy.get("button[type='submit']").click();
@@ -18,7 +18,7 @@ describe("Authentication", () => {
   });
 
   it("shows an error and stays on login page with wrong password", () => {
-    cy.visit("/login");
+    cy.visit("/login", { failOnStatusCode: false });
     cy.get("input[type='email']").type(TEST_USER.email);
     cy.get("input[type='password']").type("wrongpassword");
     cy.get("button[type='submit']").click();

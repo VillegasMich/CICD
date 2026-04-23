@@ -6,5 +6,8 @@ export default defineConfig({
     specPattern: "e2e/**/*.cy.js",
     supportFile: false,
     defaultCommandTimeout: 10000,
+    env: {
+      API_URL: "http://localhost:8000",
+    },
   },
 });

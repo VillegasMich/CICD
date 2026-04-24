@@ -1,0 +1,718 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
+      - main
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Git SHA to deploy (must already exist in ECR and S3 artifact bucket)"
+        required: true
+
+concurrency:
+  group: ci-cd-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: bicycle-app
+  DEPLOY_SHA: ${{ github.event.inputs.sha || github.sha }}
+
+jobs:
+  # ─── Backend CI ──────────────────────────────────────────────────────────────
+  be-lint-and-unit-tests:
+    name: BE Lint & Unit Tests
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Black (Formatter)
+        run: black app --check
+
+      - name: Run Pylint (Linter)
+        run: pylint app --output-format=text --fail-under=9 > pylint-report.txt || true
+
+      - name: Run Flake8 (Linter)
+        run: flake8 app --output-file=flake8-report.txt || true
+
+      - name: Run Unit Tests with Coverage
+        run: pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=term --cov-report=html
+
+      - name: Upload Test Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-reports
+          path: |
+            backend/pylint-report.txt
+            backend/flake8-report.txt
+            backend/coverage.xml
+            backend/htmlcov/
+
+  # ─── Frontend CI ─────────────────────────────────────────────────────────────
+  fe-test-and-build:
+    name: FE Test & Build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
+
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.nvmrc"
+
+      - name: Install dependencies
+        run: npm i
+
+      - name: Build
+        run: npm run build
+
+  # ─── Shared Infrastructure ───────────────────────────────────────────────────
+  # Runs once so be-build-and-push-ecr and fe-publish-to-artifact-store
+  # don't race on the same terraform state lock.
+  provision-shared-infra:
+    name: Provision Shared Infrastructure
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.6"
+
+      - name: Terraform init - shared
+        working-directory: ./infra/shared
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET_SHARED }}" \
+            -backend-config="key=shared/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE_SHARED }}"
+
+      - name: Terraform apply - shared
+        working-directory: ./infra/shared
+        run: terraform apply -auto-approve
+
+  # ─── Backend Build & Push ────────────────────────────────────────────────────
+  be-build-and-push-ecr:
+    name: BE Build & Push to ECR
+    runs-on: ubuntu-latest
+    needs: [be-lint-and-unit-tests, provision-shared-infra]
+    if: >
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} \
+            | docker login --username AWS --password-stdin \
+              ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          BASE="${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}"
+          echo "value=${BASE}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.tags.outputs.value }}
+
+  # ─── Frontend Publish ────────────────────────────────────────────────────────
+  fe-publish-to-artifact-store:
+    name: FE Publish to Artifact Store
+    runs-on: ubuntu-latest
+    needs: [fe-test-and-build, provision-shared-infra]
+    if: >
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.nvmrc"
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload versioned artifact
+        run: |
+          aws s3 sync ./frontend/dist/ \
+            s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/v${{ github.sha }}/
+
+  # ─── Deploy Staging ──────────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [be-build-and-push-ecr, fe-publish-to-artifact-store]
+    environment: staging
+    if: ${{ !failure() && !cancelled() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))) }}
+
+    outputs:
+      alb_dns_name: ${{ steps.tf_outputs.outputs.alb_dns_name }}
+      frontend_url: ${{ steps.tf_outputs.outputs.frontend_url }}
+      frontend_bucket: ${{ steps.tf_outputs.outputs.frontend_bucket }}
+      cluster: ${{ steps.tf_outputs.outputs.cluster }}
+      service: ${{ steps.tf_outputs.outputs.service }}
+      migration_task: ${{ steps.tf_outputs.outputs.migration_task }}
+      ecs_sg: ${{ steps.tf_outputs.outputs.ecs_sg }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.6"
+          terraform_wrapper: false
+
+      - name: Terraform init - staging
+        working-directory: ./infra/envs/staging
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET_STAGING }}" \
+            -backend-config="key=staging/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE_STAGING }}"
+
+      - name: Terraform apply - staging
+        working-directory: ./infra/envs/staging
+        env:
+          TF_VAR_vpc_id: ${{ vars.VPC_ID }}
+          TF_VAR_subnet_ids: ${{ vars.SUBNET_IDS }}
+          TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
+          TF_VAR_docker_image_uri: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.DEPLOY_SHA }}
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD_STAGING }}
+          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+          TF_VAR_account_id: ${{ vars.AWS_ACCOUNT_ID }}
+        run: terraform apply -auto-approve
+
+      - name: Capture Terraform outputs
+        id: tf_outputs
+        working-directory: ./infra/envs/staging
+        run: |
+          echo "alb_dns_name=$(terraform output -raw alb_dns_name)" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$(terraform output -raw frontend_website_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "frontend_bucket=$(terraform output -raw frontend_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "cluster=$(terraform output -raw ecs_cluster_name)" >> "$GITHUB_OUTPUT"
+          echo "service=$(terraform output -raw ecs_service_name)" >> "$GITHUB_OUTPUT"
+          echo "migration_task=$(terraform output -raw migration_task_definition_arn)" >> "$GITHUB_OUTPUT"
+          echo "ecs_sg=$(terraform output -raw ecs_sg_id)" >> "$GITHUB_OUTPUT"
+
+      - name: Run database migrations - staging
+        run: |
+          SUBNETS=$(echo '${{ vars.SUBNET_IDS }}' | jq -r 'join(",")')
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+            --task-definition ${{ steps.tf_outputs.outputs.migration_task }} \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${SUBNETS}],securityGroups=[${{ steps.tf_outputs.outputs.ecs_sg }}],assignPublicIp=ENABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Migration task: $TASK_ARN"
+          aws ecs wait tasks-stopped \
+            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          echo "Exit code: $EXIT_CODE"
+
+          TASK_ID=$(echo "$TASK_ARN" | awk -F'/' '{print $NF}')
+          echo "--- Migration logs ---"
+          aws logs get-log-events \
+            --log-group-name /ecs/bicycle-staging-task \
+            --log-stream-name "migration/bicycle-staging-migration/${TASK_ID}" \
+            --query 'events[*].message' \
+            --output text 2>/dev/null || echo "(no logs yet)"
+
+          [ "$EXIT_CODE" = "0" ] || (echo "Migration failed!" && exit 1)
+
+      - name: Deploy backend - staging
+        run: |
+          aws ecs update-service \
+            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+            --service ${{ steps.tf_outputs.outputs.service }} \
+            --force-new-deployment
+
+          echo "Waiting for primary deployment to complete..."
+          TIMEOUT=1800
+          INTERVAL=15
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            STATUS=$(aws ecs describe-services \
+              --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+              --services ${{ steps.tf_outputs.outputs.service }} \
+              --query 'services[0].deployments[?status==`PRIMARY`].rolloutState' \
+              --output text)
+            echo "  Primary rollout state: ${STATUS} (${ELAPSED}s elapsed)"
+            [ "$STATUS" = "COMPLETED" ] && break
+            [ "$STATUS" = "FAILED" ] && (echo "Deployment failed!" && exit 1)
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          [ $ELAPSED -ge $TIMEOUT ] && (echo "Timed out waiting for service stability" && exit 1)
+          echo "Deployment complete."
+
+      - name: Deploy frontend - staging
+        run: |
+          echo "window.ENV_API_URL = 'http://${{ steps.tf_outputs.outputs.alb_dns_name }}';" > config.js
+
+          aws s3 sync \
+            s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/v${{ env.DEPLOY_SHA }}/ \
+            s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/
+
+          aws s3 cp config.js \
+            s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/config.js \
+            --cache-control "no-store"
+
+      - name: Smoke tests - staging
+        run: |
+          curl -f --retry 5 --retry-delay 5 \
+            http://${{ steps.tf_outputs.outputs.alb_dns_name }}/api/v1/health
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: pip install -r requirements.txt
+
+      - name: Integration tests - staging
+        working-directory: ./backend
+        env:
+          BACKEND_URL: http://${{ steps.tf_outputs.outputs.alb_dns_name }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: pytest tests/integration/ -v || true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.nvmrc"
+
+      - name: Cache Cypress binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: E2E tests - staging
+        working-directory: ./frontend
+        env:
+          CYPRESS_BASE_URL: ${{ steps.tf_outputs.outputs.frontend_url }}
+          CYPRESS_API_URL: http://${{ steps.tf_outputs.outputs.alb_dns_name }}
+        run: npx cypress run
+
+      - name: Print staging URLs
+        run: |
+          echo "### Staging Deploy Complete" >> $GITHUB_STEP_SUMMARY
+          echo "| | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | http://${{ steps.tf_outputs.outputs.alb_dns_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ steps.tf_outputs.outputs.frontend_url }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ─── Deploy Production ───────────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    environment: production
+    if: ${{ !failure() && !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    outputs:
+      alb_dns_name: ${{ steps.tf_outputs.outputs.alb_dns_name }}
+      frontend_bucket: ${{ steps.tf_outputs.outputs.frontend_bucket }}
+      cluster: ${{ steps.tf_outputs.outputs.cluster }}
+      service: ${{ steps.tf_outputs.outputs.service }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.6"
+          terraform_wrapper: false
+
+      - name: Terraform init - production
+        working-directory: ./infra/envs/production
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET_PROD }}" \
+            -backend-config="key=production/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE_PROD }}"
+
+      - name: Terraform apply - production
+        working-directory: ./infra/envs/production
+        env:
+          TF_VAR_vpc_id: ${{ vars.VPC_ID }}
+          TF_VAR_subnet_ids: ${{ vars.SUBNET_IDS }}
+          TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
+          TF_VAR_docker_image_uri: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.DEPLOY_SHA }}
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD_PROD }}
+          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+          TF_VAR_account_id: ${{ vars.AWS_ACCOUNT_ID }}
+        run: terraform apply -auto-approve
+
+      - name: Capture Terraform outputs
+        id: tf_outputs
+        working-directory: ./infra/envs/production
+        run: |
+          echo "alb_dns_name=$(terraform output -raw alb_dns_name)" >> "$GITHUB_OUTPUT"
+          echo "frontend_bucket=$(terraform output -raw frontend_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "cluster=$(terraform output -raw ecs_cluster_name)" >> "$GITHUB_OUTPUT"
+          echo "service=$(terraform output -raw ecs_service_name)" >> "$GITHUB_OUTPUT"
+          echo "migration_task=$(terraform output -raw migration_task_definition_arn)" >> "$GITHUB_OUTPUT"
+          echo "ecs_sg=$(terraform output -raw ecs_sg_id)" >> "$GITHUB_OUTPUT"
+
+      - name: Run database migrations - production
+        run: |
+          SUBNETS=$(echo '${{ vars.SUBNET_IDS }}' | jq -r 'join(",")')
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+            --task-definition ${{ steps.tf_outputs.outputs.migration_task }} \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${SUBNETS}],securityGroups=[${{ steps.tf_outputs.outputs.ecs_sg }}],assignPublicIp=ENABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Migration task: $TASK_ARN"
+          aws ecs wait tasks-stopped \
+            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          echo "Exit code: $EXIT_CODE"
+          [ "$EXIT_CODE" = "0" ] || (echo "Migration failed!" && exit 1)
+
+      - name: Deploy backend - production
+        run: |
+          aws ecs update-service \
+            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+            --service ${{ steps.tf_outputs.outputs.service }} \
+            --force-new-deployment
+
+          echo "Waiting for primary deployment to complete..."
+          TIMEOUT=1800
+          INTERVAL=15
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            STATUS=$(aws ecs describe-services \
+              --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+              --services ${{ steps.tf_outputs.outputs.service }} \
+              --query 'services[0].deployments[?status==`PRIMARY`].rolloutState' \
+              --output text)
+            echo "  Primary rollout state: ${STATUS} (${ELAPSED}s elapsed)"
+            [ "$STATUS" = "COMPLETED" ] && break
+            [ "$STATUS" = "FAILED" ] && (echo "Deployment failed!" && exit 1)
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          [ $ELAPSED -ge $TIMEOUT ] && (echo "Timed out waiting for service stability" && exit 1)
+          echo "Deployment complete."
+
+      - name: Deploy frontend - production
+        run: |
+          echo "window.ENV_API_URL = 'http://${{ steps.tf_outputs.outputs.alb_dns_name }}';" > config.js
+
+          aws s3 sync \
+            s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/v${{ env.DEPLOY_SHA }}/ \
+            s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/
+
+          aws s3 cp config.js \
+            s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/config.js \
+            --cache-control "no-store"
+
+      - name: Smoke tests - production
+        run: |
+          curl -f --retry 5 --retry-delay 5 \
+            http://${{ steps.tf_outputs.outputs.alb_dns_name }}/api/v1/health
+
+  # ─── Tag Stable (promote after successful production deploy) ─────────────────
+  tag-stable:
+    name: Tag Stable Version
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: ${{ success() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Tag ECR image as :stable
+        run: |
+          MANIFEST=$(aws ecr batch-get-image \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-ids imageTag=${{ env.DEPLOY_SHA }} \
+            --query 'images[0].imageManifest' \
+            --output text)
+
+          aws ecr put-image \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-tag stable \
+            --image-manifest "$MANIFEST"
+
+          echo "Tagged ${{ env.ECR_REPOSITORY }}:${{ env.DEPLOY_SHA }} as :stable"
+
+      - name: Promote frontend artifact to stable/
+        run: |
+          aws s3 sync \
+            s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/v${{ env.DEPLOY_SHA }}/ \
+            s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/stable/ \
+            --delete
+
+      - name: Summary
+        run: |
+          echo "### Stable Version Promoted" >> $GITHUB_STEP_SUMMARY
+          echo "Version \`${{ env.DEPLOY_SHA }}\` is now the stable rollback target." >> $GITHUB_STEP_SUMMARY
+
+  # ─── Rollback Production (runs only if deploy-production fails) ──────────────
+  rollback-production:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: ${{ failure() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.6"
+          terraform_wrapper: false
+
+      - name: Terraform init - production
+        working-directory: ./infra/envs/production
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET_PROD }}" \
+            -backend-config="key=production/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE_PROD }}"
+
+      - name: Capture Terraform outputs
+        id: tf_outputs
+        working-directory: ./infra/envs/production
+        run: |
+          echo "alb_dns_name=$(terraform output -raw alb_dns_name)" >> "$GITHUB_OUTPUT"
+          echo "frontend_bucket=$(terraform output -raw frontend_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "cluster=$(terraform output -raw ecs_cluster_name)" >> "$GITHUB_OUTPUT"
+          echo "service=$(terraform output -raw ecs_service_name)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve stable SHA
+        id: stable
+        run: |
+          DIGEST=$(aws ecr describe-images \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-ids imageTag=stable \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          STABLE_SHA=$(aws ecr describe-images \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-ids imageDigest=$DIGEST \
+            --query 'imageDetails[0].imageTags[?@!=`stable`] | [0]' \
+            --output text)
+
+          if [ -z "$STABLE_SHA" ] || [ "$STABLE_SHA" = "None" ]; then
+            echo "ERROR: No stable image found in ECR. Cannot rollback." >&2
+            exit 1
+          fi
+
+          echo "Rolling back to stable SHA: $STABLE_SHA"
+          echo "sha=${STABLE_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform apply - rollback to stable
+        working-directory: ./infra/envs/production
+        env:
+          TF_VAR_vpc_id: ${{ vars.VPC_ID }}
+          TF_VAR_subnet_ids: ${{ vars.SUBNET_IDS }}
+          TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
+          TF_VAR_docker_image_uri: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ steps.stable.outputs.sha }}
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD_PROD }}
+          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+          TF_VAR_account_id: ${{ vars.AWS_ACCOUNT_ID }}
+        run: terraform apply -auto-approve
+
+      - name: Force ECS service redeploy
+        run: |
+          aws ecs update-service \
+            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+            --service ${{ steps.tf_outputs.outputs.service }} \
+            --force-new-deployment
+
+          echo "Waiting for rollback deployment to stabilize..."
+          TIMEOUT=1800
+          INTERVAL=15
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            STATUS=$(aws ecs describe-services \
+              --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+              --services ${{ steps.tf_outputs.outputs.service }} \
+              --query 'services[0].deployments[?status==`PRIMARY`].rolloutState' \
+              --output text)
+            echo "  Primary rollout state: ${STATUS} (${ELAPSED}s elapsed)"
+            [ "$STATUS" = "COMPLETED" ] && break
+            [ "$STATUS" = "FAILED" ] && (echo "Rollback deployment failed!" && exit 1)
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          [ $ELAPSED -ge $TIMEOUT ] && (echo "Timed out waiting for rollback stability" && exit 1)
+          echo "Rollback deployment complete."
+
+      - name: Rollback frontend to stable
+        run: |
+          echo "window.ENV_API_URL = 'http://${{ steps.tf_outputs.outputs.alb_dns_name }}';" > config.js
+
+          aws s3 sync \
+            s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/stable/ \
+            s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/ \
+            --delete
+
+          aws s3 cp config.js \
+            s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/config.js \
+            --cache-control "no-store"
+
+      - name: Verify rollback with smoke test
+        run: |
+          curl -f --retry 5 --retry-delay 5 \
+            http://${{ steps.tf_outputs.outputs.alb_dns_name }}/api/v1/health
+
+      - name: Rollback summary
+        if: always()
+        run: |
+          echo "### Automatic Rollback Executed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Production deploy of \`${{ env.DEPLOY_SHA }}\` failed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Failed version | \`${{ env.DEPLOY_SHA }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rolled back to | \`${{ steps.stable.outputs.sha }}\` (stable) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | http://${{ steps.tf_outputs.outputs.alb_dns_name }} |" >> $GITHUB_STEP_SUMMARY

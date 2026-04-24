@@ -1,0 +1,50 @@
+:root {
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --border: #e4e7eb;
+  --text: #1f2937;
+  --text-muted: #6b7280;
+  --primary: #0ea5e9;
+  --primary-hover: #0284c7;
+  --primary-soft: #e0f2fe;
+  --success: #10b981;
+  --success-soft: #d1fae5;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-soft: #fee2e2;
+  --warning: #f59e0b;
+  --warning-soft: #fef3c7;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --radius: 8px;
+  --radius-sm: 6px;
+
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+input, select {
+  font-family: inherit;
+  font-size: inherit;
+}

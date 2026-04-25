@@ -71,11 +71,19 @@ export default function RegisterPage() {
             />
           </div>
 
-          <button type="submit" className="btn btn-primary" disabled={submitting} style={{ width: "100%", marginTop: 8 }}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={submitting}
+            style={{ width: "100%", marginTop: 8 }}
+          >
             {submitting ? "Creating account…" : "Register"}
           </button>
 
-          <p className="page-subtitle" style={{ marginTop: 16, textAlign: "center" }}>
+          <p
+            className="page-subtitle"
+            style={{ marginTop: 16, textAlign: "center" }}
+          >
             Already have an account? <Link to="/login">Log in</Link>
           </p>
         </form>

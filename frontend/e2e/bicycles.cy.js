@@ -7,14 +7,14 @@ const TEST_USER = {
 before(() => {
   cy.request({
     method: "POST",
-    url: "/api/v1/auth/register",
+    url: `${Cypress.env("API_URL")}/api/v1/auth/register`,
     body: TEST_USER,
     failOnStatusCode: false,
   });
 });
 
 function login() {
-  cy.visit("/login");
+  cy.visit("/login", { failOnStatusCode: false });
   cy.get("input[type='email']").type(TEST_USER.email);
   cy.get("input[type='password']").type(TEST_USER.password);
   cy.get("button[type='submit']").click();

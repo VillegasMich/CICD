@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - develop
+      - main
   workflow_dispatch:
     inputs:
       sha:
@@ -56,8 +57,8 @@ jobs:
       - name: Run Flake8 (Linter)
         run: flake8 app --output-file=flake8-report.txt || true
 
-      - name: Run Unit Tests
-        run: pytest tests/unit/ -v
+      - name: Run Unit Tests with Coverage
+        run: pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=term --cov-report=html
 
       - name: Upload Test Reports
         uses: actions/upload-artifact@v4
@@ -67,6 +68,16 @@ jobs:
           path: |
             backend/pylint-report.txt
             backend/flake8-report.txt
+            backend/coverage.xml
+            backend/htmlcov/
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
+        if: github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
 
   # ─── Frontend CI ─────────────────────────────────────────────────────────────
   fe-test-and-build:
@@ -87,7 +98,16 @@ jobs:
           node-version-file: "frontend/.nvmrc"
 
       - name: Install dependencies
-        run: npm i
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run Prettier check
+        run: npm run format:check
+
+      - name: Run unit tests
+        run: npm run test
 
       - name: Build
         run: npm run build
@@ -164,11 +184,7 @@ jobs:
         id: tags
         run: |
           BASE="${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}"
-          TAGS="${BASE}:${{ github.sha }}"
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            TAGS="${TAGS},${BASE}:stable"
-          fi
-          echo "value=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "value=${BASE}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -215,20 +231,13 @@ jobs:
           aws s3 sync ./frontend/dist/ \
             s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/v${{ github.sha }}/
 
-      - name: Upload stable artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          aws s3 sync ./frontend/dist/ \
-            s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/stable/ \
-            --delete
-
   # ─── Deploy Staging ──────────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: [be-build-and-push-ecr, fe-publish-to-artifact-store]
     environment: staging
-    if: ${{ !failure() && !cancelled() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))) }}
+    if: ${{ !failure() && !cancelled() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/develop'))) }}
 
     outputs:
       alb_dns_name: ${{ steps.tf_outputs.outputs.alb_dns_name }}
@@ -319,7 +328,7 @@ jobs:
           echo "--- Migration logs ---"
           aws logs get-log-events \
             --log-group-name /ecs/bicycle-staging-task \
-            --log-stream-name "migration/${TASK_ID}" \
+            --log-stream-name "migration/bicycle-staging-migration/${TASK_ID}" \
             --query 'events[*].message' \
             --output text 2>/dev/null || echo "(no logs yet)"
 
@@ -363,10 +372,29 @@ jobs:
             s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/config.js \
             --cache-control "no-store"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.nvmrc"
+
+      - name: Cache Cypress binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
       - name: Smoke tests - staging
-        run: |
-          curl -f --retry 5 --retry-delay 5 \
-            http://${{ steps.tf_outputs.outputs.alb_dns_name }}/api/v1/health
+        working-directory: ./frontend
+        env:
+          CYPRESS_BASE_URL: ${{ steps.tf_outputs.outputs.frontend_url }}
+          CYPRESS_API_URL: http://${{ steps.tf_outputs.outputs.alb_dns_name }}
+          CYPRESS_ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          CYPRESS_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npx cypress run --spec "e2e/smoke.cy.js"
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -385,26 +413,14 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: pytest tests/integration/ -v || true
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: "frontend/.nvmrc"
-
-      - name: Cache Cypress binary
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/Cypress
-          key: cypress-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-
-      - name: Install frontend dependencies
-        working-directory: ./frontend
-        run: npm ci
-
       - name: E2E tests - staging
         working-directory: ./frontend
         env:
-          CYPRESS_BASE_URL: http://${{ steps.tf_outputs.outputs.frontend_url }}
-        run: npx cypress run
+          CYPRESS_BASE_URL: ${{ steps.tf_outputs.outputs.frontend_url }}
+          CYPRESS_API_URL: http://${{ steps.tf_outputs.outputs.alb_dns_name }}
+          CYPRESS_ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          CYPRESS_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npx cypress run --config 'excludeSpecPattern=e2e/smoke.cy.js'
 
       - name: Print staging URLs
         run: |
@@ -421,6 +437,13 @@ jobs:
     needs: [deploy-staging]
     environment: production
     if: ${{ !failure() && !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    outputs:
+      alb_dns_name: ${{ steps.tf_outputs.outputs.alb_dns_name }}
+      frontend_url: ${{ steps.tf_outputs.outputs.frontend_url }}
+      frontend_bucket: ${{ steps.tf_outputs.outputs.frontend_bucket }}
+      cluster: ${{ steps.tf_outputs.outputs.cluster }}
+      service: ${{ steps.tf_outputs.outputs.service }}
 
     steps:
       - uses: actions/checkout@v4
@@ -467,6 +490,7 @@ jobs:
         working-directory: ./infra/envs/production
         run: |
           echo "alb_dns_name=$(terraform output -raw alb_dns_name)" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$(terraform output -raw frontend_website_endpoint)" >> "$GITHUB_OUTPUT"
           echo "frontend_bucket=$(terraform output -raw frontend_bucket_name)" >> "$GITHUB_OUTPUT"
           echo "cluster=$(terraform output -raw ecs_cluster_name)" >> "$GITHUB_OUTPUT"
           echo "service=$(terraform output -raw ecs_service_name)" >> "$GITHUB_OUTPUT"
@@ -536,7 +560,203 @@ jobs:
             s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/config.js \
             --cache-control "no-store"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.nvmrc"
+
+      - name: Cache Cypress binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
       - name: Smoke tests - production
+        working-directory: ./frontend
+        env:
+          CYPRESS_BASE_URL: ${{ steps.tf_outputs.outputs.frontend_url }}
+          CYPRESS_API_URL: http://${{ steps.tf_outputs.outputs.alb_dns_name }}
+          CYPRESS_ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          CYPRESS_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npx cypress run --spec "e2e/smoke.cy.js"
+
+  # ─── Tag Stable (promote after successful production deploy) ─────────────────
+  tag-stable:
+    name: Tag Stable Version
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: ${{ success() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Tag ECR image as :stable
+        run: |
+          MANIFEST=$(aws ecr batch-get-image \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-ids imageTag=${{ env.DEPLOY_SHA }} \
+            --query 'images[0].imageManifest' \
+            --output text)
+
+          aws ecr put-image \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-tag stable \
+            --image-manifest "$MANIFEST"
+
+          echo "Tagged ${{ env.ECR_REPOSITORY }}:${{ env.DEPLOY_SHA }} as :stable"
+
+      - name: Promote frontend artifact to stable/
+        run: |
+          aws s3 sync \
+            s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/v${{ env.DEPLOY_SHA }}/ \
+            s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/stable/ \
+            --delete
+
+      - name: Summary
+        run: |
+          echo "### Stable Version Promoted" >> $GITHUB_STEP_SUMMARY
+          echo "Version \`${{ env.DEPLOY_SHA }}\` is now the stable rollback target." >> $GITHUB_STEP_SUMMARY
+
+  # ─── Rollback Production (runs only if deploy-production fails) ──────────────
+  rollback-production:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: ${{ needs.deploy-production.result == 'failure' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.6"
+          terraform_wrapper: false
+
+      - name: Terraform init - production
+        working-directory: ./infra/envs/production
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET_PROD }}" \
+            -backend-config="key=production/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE_PROD }}"
+
+      - name: Capture Terraform outputs
+        id: tf_outputs
+        working-directory: ./infra/envs/production
+        run: |
+          echo "alb_dns_name=$(terraform output -raw alb_dns_name)" >> "$GITHUB_OUTPUT"
+          echo "frontend_bucket=$(terraform output -raw frontend_bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "cluster=$(terraform output -raw ecs_cluster_name)" >> "$GITHUB_OUTPUT"
+          echo "service=$(terraform output -raw ecs_service_name)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve stable SHA
+        id: stable
+        run: |
+          DIGEST=$(aws ecr describe-images \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-ids imageTag=stable \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          STABLE_SHA=$(aws ecr describe-images \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-ids imageDigest=$DIGEST \
+            --query 'imageDetails[0].imageTags[?@!=`stable`] | [0]' \
+            --output text)
+
+          if [ -z "$STABLE_SHA" ] || [ "$STABLE_SHA" = "None" ]; then
+            echo "ERROR: No stable image found in ECR. Cannot rollback." >&2
+            exit 1
+          fi
+
+          echo "Rolling back to stable SHA: $STABLE_SHA"
+          echo "sha=${STABLE_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform apply - rollback to stable
+        working-directory: ./infra/envs/production
+        env:
+          TF_VAR_vpc_id: ${{ vars.VPC_ID }}
+          TF_VAR_subnet_ids: ${{ vars.SUBNET_IDS }}
+          TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
+          TF_VAR_docker_image_uri: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ steps.stable.outputs.sha }}
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD_PROD }}
+          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+          TF_VAR_account_id: ${{ vars.AWS_ACCOUNT_ID }}
+        run: terraform apply -auto-approve
+
+      - name: Force ECS service redeploy
+        run: |
+          aws ecs update-service \
+            --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+            --service ${{ steps.tf_outputs.outputs.service }} \
+            --force-new-deployment
+
+          echo "Waiting for rollback deployment to stabilize..."
+          TIMEOUT=1800
+          INTERVAL=15
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            STATUS=$(aws ecs describe-services \
+              --cluster ${{ steps.tf_outputs.outputs.cluster }} \
+              --services ${{ steps.tf_outputs.outputs.service }} \
+              --query 'services[0].deployments[?status==`PRIMARY`].rolloutState' \
+              --output text)
+            echo "  Primary rollout state: ${STATUS} (${ELAPSED}s elapsed)"
+            [ "$STATUS" = "COMPLETED" ] && break
+            [ "$STATUS" = "FAILED" ] && (echo "Rollback deployment failed!" && exit 1)
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          [ $ELAPSED -ge $TIMEOUT ] && (echo "Timed out waiting for rollback stability" && exit 1)
+          echo "Rollback deployment complete."
+
+      - name: Rollback frontend to stable
+        run: |
+          echo "window.ENV_API_URL = 'http://${{ steps.tf_outputs.outputs.alb_dns_name }}';" > config.js
+
+          aws s3 sync \
+            s3://bicycle-frontend-artifacts-${{ vars.AWS_ACCOUNT_ID }}/stable/ \
+            s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/ \
+            --delete
+
+          aws s3 cp config.js \
+            s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/config.js \
+            --cache-control "no-store"
+
+      - name: Verify rollback with smoke test
         run: |
           curl -f --retry 5 --retry-delay 5 \
             http://${{ steps.tf_outputs.outputs.alb_dns_name }}/api/v1/health
+
+      - name: Rollback summary
+        if: always()
+        run: |
+          echo "### Automatic Rollback Executed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Production deploy of \`${{ env.DEPLOY_SHA }}\` failed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Failed version | \`${{ env.DEPLOY_SHA }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rolled back to | \`${{ steps.stable.outputs.sha }}\` (stable) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | http://${{ steps.tf_outputs.outputs.alb_dns_name }} |" >> $GITHUB_STEP_SUMMARY

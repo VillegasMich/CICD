@@ -132,7 +132,9 @@ resource "aws_ecs_task_definition" "migration" {
       command    = ["alembic upgrade head && python scripts/create_admin.py"]
 
       environment = [
-        { name = "DATABASE_URL", value = var.database_url },
+        { name = "DATABASE_URL",    value = var.database_url },
+        { name = "ADMIN_EMAIL",     value = var.admin_email },
+        { name = "ADMIN_PASSWORD",  value = var.admin_password },
       ]
 
       logConfiguration = {

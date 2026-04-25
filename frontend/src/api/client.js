@@ -8,7 +8,10 @@ export function configureApi({ getToken, onUnauthorized: handler }) {
   if (handler) onUnauthorized = handler;
 }
 
-export async function apiFetch(path, { method = "GET", body, headers = {} } = {}) {
+export async function apiFetch(
+  path,
+  { method = "GET", body, headers = {} } = {}
+) {
   const token = tokenProvider();
   const finalHeaders = { ...headers };
   if (body !== undefined) finalHeaders["Content-Type"] = "application/json";

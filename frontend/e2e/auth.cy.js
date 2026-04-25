@@ -1,6 +1,3 @@
-import cy from "cypress";
-import { before, describe, it } from "mocha";
-
 const TEST_USER = {
   name: "E2E User",
   email: "e2e_auth@test.com",

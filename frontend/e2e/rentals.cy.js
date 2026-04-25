@@ -1,6 +1,3 @@
-import cy from "cypress";
-import { before, describe, it, beforeEach } from "mocha";
-
 const TEST_USER = {
   name: "E2E Rentals User",
   email: "e2e_rentals@test.com",

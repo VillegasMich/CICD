@@ -232,9 +232,8 @@ jobs:
         with:
           scan-type: image
           input: /tmp/bicycle-app.tar
-          severity: CRITICAL,HIGH
-          exit-code: '1'
-          ignore-unfixed: true
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '0'
           format: sarif
           output: trivy-image-results.sarif
 

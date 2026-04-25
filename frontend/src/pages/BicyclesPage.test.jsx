@@ -15,7 +15,6 @@ import {
   fetchBicycles,
   createBicycle,
   deleteBicycle,
-  updateBicycle,
 } from "../api/bicycles";
 
 const BIKES = [

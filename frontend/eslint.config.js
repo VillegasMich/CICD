@@ -6,13 +6,23 @@ import eslintConfigPrettier from "eslint-config-prettier";
 import { defineConfig, globalIgnores } from "eslint/config";
 
 export default defineConfig([
-  globalIgnores(["dist"]),
+  globalIgnores(["dist", "coverage"]),
   {
     files: ["e2e/**/*.cy.js"],
     languageOptions: {
       globals: {
         ...globals.browser,
         Cypress: "readonly",
+      },
+    },
+  },
+  {
+    files: ["**/*.test.{js,jsx}", "**/__tests__/**/*.{js,jsx}", "**/setupTests.{js,jsx}"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        ...globals.jest,
       },
     },
   },

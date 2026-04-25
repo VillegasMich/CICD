@@ -112,6 +112,34 @@ jobs:
       - name: Build
         run: npm run build
 
+  # ─── Security Scanning (PR) ──────────────────────────────────────────────────
+  trivy-fs-scan:
+    name: Trivy FS Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '0'
+          format: sarif
+          output: trivy-fs-results.sarif
+
+      - name: Upload Trivy SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs-results.sarif
+
   # ─── Shared Infrastructure ───────────────────────────────────────────────────
   # Runs once so be-build-and-push-ecr and fe-publish-to-artifact-store
   # don't race on the same terraform state lock.
@@ -159,6 +187,8 @@ jobs:
     if: >
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    permissions:
+      security-events: write
 
     steps:
       - uses: actions/checkout@v4
@@ -186,7 +216,35 @@ jobs:
           BASE="${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}"
           echo "value=${BASE}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push Docker image
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          load: true
+          tags: ${{ steps.tags.outputs.value }}
+
+      - name: Export image to tar
+        run: docker save ${{ steps.tags.outputs.value }} -o /tmp/bicycle-app.tar
+
+      - name: Run Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          input: /tmp/bicycle-app.tar
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-image-results.sarif
+
+      - name: Upload Trivy SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image-results.sarif
+
+      - name: Push Docker image to ECR
         uses: docker/build-push-action@v5
         with:
           context: ./backend

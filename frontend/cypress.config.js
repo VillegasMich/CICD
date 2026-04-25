@@ -13,8 +13,14 @@ function loadDotenv(path) {
       .filter((line) => line && !line.startsWith("#") && line.includes("="))
       .map((line) => {
         const [key, ...rest] = line.split("=");
-        return [key.trim(), rest.join("=").trim().replace(/^["']|["']$/g, "")];
-      }),
+        return [
+          key.trim(),
+          rest
+            .join("=")
+            .trim()
+            .replace(/^["']|["']$/g, ""),
+        ];
+      })
   );
 }
 

@@ -69,14 +69,22 @@ export default function RentalsPage() {
                 <td>{formatDate(r.start_time)}</td>
                 <td>{formatDate(r.end_time)}</td>
                 <td>
-                  <span className={`badge badge-${r.status === "active" ? "rented" : "available"}`}>
+                  <span
+                    className={`badge badge-${r.status === "active" ? "rented" : "available"}`}
+                  >
                     {r.status}
                   </span>
                 </td>
                 <td>
-                  <div className="actions" style={{ justifyContent: "flex-end" }}>
+                  <div
+                    className="actions"
+                    style={{ justifyContent: "flex-end" }}
+                  >
                     {r.status === "active" && (
-                      <button className="btn btn-icon" onClick={() => handleComplete(r.id)}>
+                      <button
+                        className="btn btn-icon"
+                        onClick={() => handleComplete(r.id)}
+                      >
                         Complete
                       </button>
                     )}

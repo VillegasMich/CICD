@@ -1,6 +1,3 @@
-import cy from "cypress";
-import { describe, it } from "mocha";
-
 describe("Smoke", () => {
   it("logs in with admin credentials and redirects to bicycles", () => {
     cy.visit("/login", { failOnStatusCode: false });

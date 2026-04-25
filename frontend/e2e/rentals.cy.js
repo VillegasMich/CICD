@@ -1,3 +1,6 @@
+import cy from "cypress";
+import { before, describe, it, beforeEach } from "mocha";
+
 const TEST_USER = {
   name: "E2E Rentals User",
   email: "e2e_rentals@test.com",
@@ -5,7 +8,12 @@ const TEST_USER = {
 };
 
 before(() => {
-  cy.request({ method: "POST", url: `${Cypress.env("API_URL")}/api/v1/auth/register`, body: TEST_USER, failOnStatusCode: false });
+  cy.request({
+    method: "POST",
+    url: `${Cypress.env("API_URL")}/api/v1/auth/register`,
+    body: TEST_USER,
+    failOnStatusCode: false,
+  });
 });
 
 function login() {

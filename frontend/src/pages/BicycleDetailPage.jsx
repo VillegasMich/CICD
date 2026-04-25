@@ -13,13 +13,10 @@ export default function BicycleDetailPage() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState(null);
 
-  const load = () =>
+  useEffect(() => {
     fetchBicycle(id)
       .then(setBicycle)
       .catch(() => setError("Failed to load bicycle"));
-
-  useEffect(() => {
-    load();
   }, [id]);
 
   const openRent = () => {
@@ -89,9 +86,13 @@ export default function BicycleDetailPage() {
               <td>{bicycle.type}</td>
             </tr>
             <tr>
-              <th style={{ textAlign: "left", padding: "14px 20px" }}>Status</th>
+              <th style={{ textAlign: "left", padding: "14px 20px" }}>
+                Status
+              </th>
               <td>
-                <span className={`badge badge-${bicycle.status}`}>{bicycle.status}</span>
+                <span className={`badge badge-${bicycle.status}`}>
+                  {bicycle.status}
+                </span>
               </td>
             </tr>
           </tbody>

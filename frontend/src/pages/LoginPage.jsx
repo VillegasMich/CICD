@@ -63,11 +63,19 @@ export default function LoginPage() {
             />
           </div>
 
-          <button type="submit" className="btn btn-primary" disabled={submitting} style={{ width: "100%", marginTop: 8 }}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={submitting}
+            style={{ width: "100%", marginTop: 8 }}
+          >
             {submitting ? "Signing in…" : "Log in"}
           </button>
 
-          <p className="page-subtitle" style={{ marginTop: 16, textAlign: "center" }}>
+          <p
+            className="page-subtitle"
+            style={{ marginTop: 16, textAlign: "center" }}
+          >
             Don't have an account? <Link to="/register">Register</Link>
           </p>
         </form>

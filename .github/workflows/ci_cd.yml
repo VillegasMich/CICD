@@ -372,10 +372,29 @@ jobs:
             s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/config.js \
             --cache-control "no-store"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.nvmrc"
+
+      - name: Cache Cypress binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
       - name: Smoke tests - staging
-        run: |
-          curl -f --retry 5 --retry-delay 5 \
-            http://${{ steps.tf_outputs.outputs.alb_dns_name }}/api/v1/health
+        working-directory: ./frontend
+        env:
+          CYPRESS_BASE_URL: ${{ steps.tf_outputs.outputs.frontend_url }}
+          CYPRESS_API_URL: http://${{ steps.tf_outputs.outputs.alb_dns_name }}
+          CYPRESS_ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          CYPRESS_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npx cypress run --spec "e2e/smoke.cy.js"
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -394,27 +413,14 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: pytest tests/integration/ -v || true
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: "frontend/.nvmrc"
-
-      - name: Cache Cypress binary
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/Cypress
-          key: cypress-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-
-      - name: Install frontend dependencies
-        working-directory: ./frontend
-        run: npm ci
-
       - name: E2E tests - staging
         working-directory: ./frontend
         env:
           CYPRESS_BASE_URL: ${{ steps.tf_outputs.outputs.frontend_url }}
           CYPRESS_API_URL: http://${{ steps.tf_outputs.outputs.alb_dns_name }}
-        run: npx cypress run
+          CYPRESS_ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          CYPRESS_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npx cypress run --config 'excludeSpecPattern=e2e/smoke.cy.js'
 
       - name: Print staging URLs
         run: |
@@ -434,6 +440,7 @@ jobs:
 
     outputs:
       alb_dns_name: ${{ steps.tf_outputs.outputs.alb_dns_name }}
+      frontend_url: ${{ steps.tf_outputs.outputs.frontend_url }}
       frontend_bucket: ${{ steps.tf_outputs.outputs.frontend_bucket }}
       cluster: ${{ steps.tf_outputs.outputs.cluster }}
       service: ${{ steps.tf_outputs.outputs.service }}
@@ -483,6 +490,7 @@ jobs:
         working-directory: ./infra/envs/production
         run: |
           echo "alb_dns_name=$(terraform output -raw alb_dns_name)" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$(terraform output -raw frontend_website_endpoint)" >> "$GITHUB_OUTPUT"
           echo "frontend_bucket=$(terraform output -raw frontend_bucket_name)" >> "$GITHUB_OUTPUT"
           echo "cluster=$(terraform output -raw ecs_cluster_name)" >> "$GITHUB_OUTPUT"
           echo "service=$(terraform output -raw ecs_service_name)" >> "$GITHUB_OUTPUT"
@@ -552,10 +560,29 @@ jobs:
             s3://${{ steps.tf_outputs.outputs.frontend_bucket }}/config.js \
             --cache-control "no-store"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.nvmrc"
+
+      - name: Cache Cypress binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
       - name: Smoke tests - production
-        run: |
-          curl -f --retry 5 --retry-delay 5 \
-            http://${{ steps.tf_outputs.outputs.alb_dns_name }}/api/v1/health
+        working-directory: ./frontend
+        env:
+          CYPRESS_BASE_URL: ${{ steps.tf_outputs.outputs.frontend_url }}
+          CYPRESS_API_URL: http://${{ steps.tf_outputs.outputs.alb_dns_name }}
+          CYPRESS_ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          CYPRESS_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npx cypress run --spec "e2e/smoke.cy.js"
 
   # ─── Tag Stable (promote after successful production deploy) ─────────────────
   tag-stable:

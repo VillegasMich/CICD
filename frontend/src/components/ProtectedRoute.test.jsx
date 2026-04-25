@@ -39,7 +39,10 @@ describe("ProtectedRoute", () => {
   test("redirects non-admin to /bicycles when requireAdmin is true", () => {
     useAuth.mockReturnValue({ user: { id: 1, role: "user" }, loading: false });
     renderRoute({ requireAdmin: true });
-    expect(screen.getByTestId("navigate")).toHaveAttribute("data-to", "/bicycles");
+    expect(screen.getByTestId("navigate")).toHaveAttribute(
+      "data-to",
+      "/bicycles"
+    );
     expect(screen.queryByText("secret content")).not.toBeInTheDocument();
   });
 

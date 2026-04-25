@@ -33,7 +33,9 @@ describe("BicycleDetailPage — loading / error states", () => {
   test("shows error when fetch fails", async () => {
     fetchBicycle.mockRejectedValue(new Error("not found"));
     render(<BicycleDetailPage />);
-    expect(await screen.findByText("Failed to load bicycle")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Failed to load bicycle")
+    ).toBeInTheDocument();
   });
 });
 
@@ -67,7 +69,9 @@ describe("BicycleDetailPage — bicycle details", () => {
 
   test("opens rental modal with user name when Rent button is clicked", async () => {
     render(<BicycleDetailPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Rent this bicycle" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Rent this bicycle" })
+    );
     expect(screen.getByText(/Renting as/)).toBeInTheDocument();
     expect(screen.getByText("Alice")).toBeInTheDocument();
   });
@@ -75,7 +79,9 @@ describe("BicycleDetailPage — bicycle details", () => {
   test("calls createRental and navigates to /rentals on confirm", async () => {
     createRental.mockResolvedValue({ id: 10 });
     render(<BicycleDetailPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Rent this bicycle" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Rent this bicycle" })
+    );
     fireEvent.submit(
       screen.getByRole("button", { name: "Confirm rental" }).closest("form")
     );
@@ -89,11 +95,15 @@ describe("BicycleDetailPage — bicycle details", () => {
   test("shows error in modal when createRental fails", async () => {
     createRental.mockRejectedValue(new Error("unavailable"));
     render(<BicycleDetailPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Rent this bicycle" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Rent this bicycle" })
+    );
     fireEvent.submit(
       screen.getByRole("button", { name: "Confirm rental" }).closest("form")
     );
 
-    expect(await screen.findByText("Failed to start rental")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Failed to start rental")
+    ).toBeInTheDocument();
   });
 });

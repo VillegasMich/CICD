@@ -11,11 +11,7 @@ jest.mock("react-router-dom", () => ({
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import BicyclesPage from "./BicyclesPage";
 import { useAuth } from "../context/AuthContext";
-import {
-  fetchBicycles,
-  createBicycle,
-  deleteBicycle,
-} from "../api/bicycles";
+import { fetchBicycles, createBicycle, deleteBicycle } from "../api/bicycles";
 
 const BIKES = [
   { id: 1, brand: "Trek", type: "mountain", status: "available" },
@@ -42,7 +38,9 @@ describe("BicyclesPage — data loading", () => {
   test("shows error when fetch fails", async () => {
     fetchBicycles.mockRejectedValue(new Error("network error"));
     renderAs();
-    expect(await screen.findByText("Failed to load bicycles")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Failed to load bicycles")
+    ).toBeInTheDocument();
   });
 
   test("shows empty state message when no bicycles", async () => {
@@ -56,14 +54,20 @@ describe("BicyclesPage — non-admin user", () => {
   test("does not show Add bicycle button", async () => {
     renderAs("user");
     await screen.findByText("Trek");
-    expect(screen.queryByRole("button", { name: /Add bicycle/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Add bicycle/ })
+    ).not.toBeInTheDocument();
   });
 
   test("does not show Edit or Delete buttons", async () => {
     renderAs("user");
     await screen.findByText("Trek");
-    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete" })
+    ).not.toBeInTheDocument();
   });
 
   test("shows View link for each bicycle", async () => {
@@ -78,7 +82,9 @@ describe("BicyclesPage — admin user", () => {
   test("shows Add bicycle button", async () => {
     renderAs("admin");
     await screen.findByText("Trek");
-    expect(screen.getByRole("button", { name: /Add bicycle/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Add bicycle/ })
+    ).toBeInTheDocument();
   });
 
   test("shows Edit and Delete buttons for each row", async () => {
@@ -104,7 +110,12 @@ describe("BicyclesPage — admin user", () => {
   });
 
   test("calls createBicycle and reloads on form submit", async () => {
-    createBicycle.mockResolvedValue({ id: 3, brand: "Cannondale", type: "road", status: "available" });
+    createBicycle.mockResolvedValue({
+      id: 3,
+      brand: "Cannondale",
+      type: "road",
+      status: "available",
+    });
     renderAs("admin");
     await screen.findByText("Trek");
 
@@ -115,13 +126,17 @@ describe("BicyclesPage — admin user", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g. mountain"), {
       target: { value: "road" },
     });
-    fireEvent.submit(screen.getByRole("button", { name: "Create" }).closest("form"));
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Create" }).closest("form")
+    );
 
-    await waitFor(() => expect(createBicycle).toHaveBeenCalledWith({
-      brand: "Cannondale",
-      type: "road",
-      status: "available",
-    }));
+    await waitFor(() =>
+      expect(createBicycle).toHaveBeenCalledWith({
+        brand: "Cannondale",
+        type: "road",
+        status: "available",
+      })
+    );
   });
 
   test("calls deleteBicycle and reloads when confirmed", async () => {

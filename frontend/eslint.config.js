@@ -17,7 +17,11 @@ export default defineConfig([
     },
   },
   {
-    files: ["**/*.test.{js,jsx}", "**/__tests__/**/*.{js,jsx}", "**/setupTests.{js,jsx}"],
+    files: [
+      "**/*.test.{js,jsx}",
+      "**/__tests__/**/*.{js,jsx}",
+      "**/setupTests.{js,jsx}",
+    ],
     languageOptions: {
       globals: {
         ...globals.browser,

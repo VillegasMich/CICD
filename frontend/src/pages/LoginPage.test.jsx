@@ -5,7 +5,13 @@ jest.mock("react-router-dom", () => ({
   useLocation: jest.fn(),
 }));
 
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import LoginPage from "./LoginPage";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -27,7 +33,9 @@ describe("LoginPage", () => {
   test("renders email and password inputs with submit button", () => {
     const { container } = renderPage();
     expect(container.querySelector('input[type="email"]')).toBeInTheDocument();
-    expect(container.querySelector('input[type="password"]')).toBeInTheDocument();
+    expect(
+      container.querySelector('input[type="password"]')
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Log in" })).toBeInTheDocument();
   });
 
@@ -55,7 +63,9 @@ describe("LoginPage", () => {
     fireEvent.change(container.querySelector('input[type="password"]'), {
       target: { value: "secret123" },
     });
-    fireEvent.submit(screen.getByRole("button", { name: "Log in" }).closest("form"));
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Log in" }).closest("form")
+    );
 
     await waitFor(() =>
       expect(loginFn).toHaveBeenCalledWith({
@@ -69,7 +79,9 @@ describe("LoginPage", () => {
     const loginFn = jest.fn().mockResolvedValue({});
     renderPage(loginFn);
 
-    fireEvent.submit(screen.getByRole("button", { name: "Log in" }).closest("form"));
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Log in" }).closest("form")
+    );
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/bicycles", { replace: true })
@@ -81,7 +93,9 @@ describe("LoginPage", () => {
     const loginFn = jest.fn().mockResolvedValue({});
     renderPage(loginFn);
 
-    fireEvent.submit(screen.getByRole("button", { name: "Log in" }).closest("form"));
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Log in" }).closest("form")
+    );
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/rentals", { replace: true })
@@ -89,11 +103,15 @@ describe("LoginPage", () => {
   });
 
   test("shows error message when login fails", async () => {
-    const loginFn = jest.fn().mockRejectedValue(new Error("Invalid credentials"));
+    const loginFn = jest
+      .fn()
+      .mockRejectedValue(new Error("Invalid credentials"));
     renderPage(loginFn);
 
     await act(async () => {
-      fireEvent.submit(screen.getByRole("button", { name: "Log in" }).closest("form"));
+      fireEvent.submit(
+        screen.getByRole("button", { name: "Log in" }).closest("form")
+      );
     });
 
     expect(screen.getByText("Invalid credentials")).toBeInTheDocument();
@@ -104,7 +122,9 @@ describe("LoginPage", () => {
     renderPage(loginFn);
 
     await act(async () => {
-      fireEvent.submit(screen.getByRole("button", { name: "Log in" }).closest("form"));
+      fireEvent.submit(
+        screen.getByRole("button", { name: "Log in" }).closest("form")
+      );
     });
 
     await waitFor(() =>

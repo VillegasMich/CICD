@@ -32,14 +32,22 @@ describe("AuthProvider — no stored token", () => {
 describe("AuthProvider — with stored token", () => {
   beforeEach(() => {
     localStorage.setItem("auth_token", "stored-token");
-    authApi.fetchMe.mockResolvedValue({ id: 1, email: "a@b.com", role: "user" });
+    authApi.fetchMe.mockResolvedValue({
+      id: 1,
+      email: "a@b.com",
+      role: "user",
+    });
   });
 
   test("fetches current user on boot when token exists", async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(authApi.fetchMe).toHaveBeenCalled();
-    expect(result.current.user).toEqual({ id: 1, email: "a@b.com", role: "user" });
+    expect(result.current.user).toEqual({
+      id: 1,
+      email: "a@b.com",
+      role: "user",
+    });
   });
 
   test("clears user and token on logout", async () => {
@@ -68,13 +76,21 @@ describe("AuthProvider — login", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     authApi.login.mockResolvedValue({ access_token: "new-tok" });
-    authApi.fetchMe.mockResolvedValue({ id: 2, email: "b@c.com", role: "admin" });
+    authApi.fetchMe.mockResolvedValue({
+      id: 2,
+      email: "b@c.com",
+      role: "admin",
+    });
 
     await act(async () => {
       await result.current.login({ email: "b@c.com", password: "pass" });
     });
 
     expect(result.current.token).toBe("new-tok");
-    expect(result.current.user).toEqual({ id: 2, email: "b@c.com", role: "admin" });
+    expect(result.current.user).toEqual({
+      id: 2,
+      email: "b@c.com",
+      role: "admin",
+    });
   });
 });

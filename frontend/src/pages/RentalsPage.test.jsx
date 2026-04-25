@@ -41,15 +41,15 @@ describe("RentalsPage — data loading", () => {
   test("shows empty state when there are no rentals", async () => {
     fetchRentals.mockResolvedValue([]);
     render(<RentalsPage />);
-    expect(
-      await screen.findByText(/No rentals yet/)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/No rentals yet/)).toBeInTheDocument();
   });
 
   test("shows error when fetch fails", async () => {
     fetchRentals.mockRejectedValue(new Error("network error"));
     render(<RentalsPage />);
-    expect(await screen.findByText("Failed to load rentals")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Failed to load rentals")
+    ).toBeInTheDocument();
   });
 });
 
@@ -87,7 +87,9 @@ describe("RentalsPage — rental actions", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Complete" }));
 
-    expect(await screen.findByText("Failed to complete rental")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Failed to complete rental")
+    ).toBeInTheDocument();
   });
 });
 

@@ -4,7 +4,13 @@ jest.mock("react-router-dom", () => ({
   useNavigate: jest.fn(),
 }));
 
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import RegisterPage from "./RegisterPage";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -30,8 +36,12 @@ describe("RegisterPage", () => {
     const { container } = renderPage();
     expect(getNameInput(container)).toBeInTheDocument();
     expect(container.querySelector('input[type="email"]')).toBeInTheDocument();
-    expect(container.querySelector('input[type="password"]')).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Register" })).toBeInTheDocument();
+    expect(
+      container.querySelector('input[type="password"]')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Register" })
+    ).toBeInTheDocument();
   });
 
   test("renders label text for each field", () => {
@@ -112,7 +122,9 @@ describe("RegisterPage", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Register" })).not.toBeDisabled()
+      expect(
+        screen.getByRole("button", { name: "Register" })
+      ).not.toBeDisabled()
     );
   });
 });

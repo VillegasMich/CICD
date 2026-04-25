@@ -1,4 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate, NavLink, Link } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  NavLink,
+  Link,
+} from "react-router-dom";
 import BicyclesPage from "./pages/BicyclesPage";
 import BicycleDetailPage from "./pages/BicycleDetailPage";
 import RentalsPage from "./pages/RentalsPage";
@@ -22,31 +29,49 @@ function Navbar() {
           <>
             <NavLink
               to="/bicycles"
-              className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
+              className={({ isActive }) =>
+                "nav-link" + (isActive ? " active" : "")
+              }
             >
               Bicycles
             </NavLink>
             <NavLink
               to="/rentals"
-              className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
+              className={({ isActive }) =>
+                "nav-link" + (isActive ? " active" : "")
+              }
             >
               Rentals
             </NavLink>
           </>
         )}
       </nav>
-      <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+      <div
+        style={{
+          marginLeft: "auto",
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+        }}
+      >
         {user ? (
           <>
             <span className="page-subtitle" style={{ margin: 0 }}>
-              {user.name}{user.role === "admin" ? " (admin)" : ""}
+              {user.name}
+              {user.role === "admin" ? " (admin)" : ""}
             </span>
-            <button className="btn" onClick={logout}>Logout</button>
+            <button className="btn" onClick={logout}>
+              Logout
+            </button>
           </>
         ) : (
           <>
-            <Link to="/login" className="nav-link">Login</Link>
-            <Link to="/register" className="nav-link">Register</Link>
+            <Link to="/login" className="nav-link">
+              Login
+            </Link>
+            <Link to="/register" className="nav-link">
+              Register
+            </Link>
           </>
         )}
       </div>
